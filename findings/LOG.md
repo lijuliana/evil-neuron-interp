@@ -48,3 +48,9 @@ Format:
 - result: lit/poor-things.md written; keystone thresholds (KL>2.5 / top1<0.3) and typed-check vocabulary adopted in AGENT_BRIEF; 11 F1/F2-relevant 4B specimens listed as priors
 - next: A4b tests the priors on WeirdChat F1 prompts + benign induction set after the replay; cross-scale comparison once 27B hubs exist
 - data: lit/poor-things.md
+
+## 2026-10-28 07:50  A0  Baseline replication (bf16) IN PROGRESS, judging pending
+- what: scripts/05_a0_baseline.py on VM: 11 behaviors x 20 prompts (highest shipped matched fraction) x 64 samples, T=1.0/top_p .95/top_k 20/400 tok, batch 80 (~560 tok/s; batch 128 OOMed). Writes /data/runs/baseline_27b/{behavior}.jsonl on the VM. VM auto-shuts down (~/autostop.sh) when the job exits.
+- result: pending (~2.5 h total). No ANTHROPIC_API_KEY in .env or env, so judging is a TODO: src/judge.py (Haiku 5.5, Transluce prompt template, cache, dry-run) is ready; dry-run calibrate verified locally.
+- next: start VM, `gcloud compute scp 'weirdchat-a100:/data/runs/baseline_27b/*.jsonl' runs/baseline_27b/`, then `python -I src/judge.py calibrate --n 500` and `python -I src/judge.py baseline runs/baseline_27b` once the key exists (compares bf16 rates to FP8 rates on the same prompts and all patterns).
+- data: VM /data/runs/baseline_27b/, /data/runs/baseline.log

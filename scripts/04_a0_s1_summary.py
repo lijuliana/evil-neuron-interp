@@ -9,8 +9,12 @@ Outputs (in --out, default /data/captures/s1/summary):
   noise_floor.parquet             shuffled-label control: per behavior x position, max|d|, 99.9/99.99 pct, #|d|>=0.5
   summary_promptlevel_{behavior}.parquet  top 2000 |rho| (Spearman of last-prompt activation vs prompt match rate)
   promptlevel_null.parquet        |rho| quantiles over 10k random neurons + permutation null (rates shuffled)
-  hub_candidates.parquet          per neuron: #behaviors with max_{k=1..8}|d_pooled|>=0.5, #behaviors |d_within|>=0.5,
-                                  #behaviors |rho|>=0.5, hub_score, per-behavior values. Top 5000.
+  hub_candidates.parquet          per neuron, CALIBRATED counts: a behavior counts for d if max_{k=1..8}|d| >= thr_d[b] =
+                                  max(0.5, that behavior's shuffled-label max|d| over all neurons at asst_1..8); for rho if
+                                  n_prompts>=20 and |rho| >= that behavior's permutation-null max|rho| (mean over 20 perms of the
+                                  max over 10k random neurons). hub_score = n_beh_d_pooled_cal + n_beh_rho_cal; tie-break by
+                                  n_beh_d_within_cal then sum of max|d|. Uncalibrated >=0.5 counts kept as columns. Top 5000.
+  hub_thresholds.json             the per-behavior thresholds used.
 """
 import argparse, glob, json, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
@@ -84,7 +88,8 @@ for b in behaviors:
                                           n_matched=int(m["count"][POSITIONS.index(pos)]), n_unmatched=int(u["count"][POSITIONS.index(pos)]),
                                           n_prompts=P, null_sd=np.sqrt(nullvar[pos]) / P)))
     pd.concat(rows).to_parquet(f"{args.out}/summary_{b}.parquet", index=False)
-    hub[b] = dict(d_pooled=maxabs_pooled, d_within=maxabs_within, n_prompts=len(pfiles))
+    shuf_max = max(r["max_abs_d"] for r in floor_rows if r["behavior"] == b and r["position"] in PRE_POS)
+    hub[b] = dict(d_pooled=maxabs_pooled, d_within=maxabs_within, n_prompts=len(pfiles), thr_d=max(args.thr, shuf_max))
     print(f"[summary] {b}: pooled max|d| asst_1..8 = {maxabs_pooled.max():.2f}, within-prompt ({len(pfiles)} prompts) max|d| = {maxabs_within.max():.2f}", flush=True)
 pd.DataFrame(floor_rows).to_parquet(f"{args.out}/noise_floor.parquet", index=False)
 
@@ -112,7 +117,7 @@ if os.path.exists(f"{args.s1}/prompt_level_acts.npy"):
         A = np.asarray(acts[np.sort(rows_i)]).reshape(len(rows_i), -1); rate = rate[np.argsort(rows_i)]
         rho = spearman(A, rate)
         rho2 = rho.reshape(N_LAYERS, D_MLP)
-        rho_by_b[b] = (np.abs(rho2), len(rows_i))
+        rho_by_b[b] = [np.abs(rho2), len(rows_i), None]
         L, N = topk(rho2, args.top)
         pd.DataFrame(dict(layer=L, neuron=N, rho=rho2[L, N], n_prompts=len(rows_i))).to_parquet(
             f"{args.out}/summary_promptlevel_{b}.parquet", index=False)
@@ -121,6 +126,7 @@ if os.path.exists(f"{args.s1}/prompt_level_acts.npy"):
         for _ in range(20):
             pr = np.abs(spearman(A[:, rand_neurons], rng.permutation(rate)))
             perm_max.append(pr.max()); perm_p999.append(np.quantile(pr, 0.999))
+        rho_by_b[b][2] = float(np.mean(perm_max))
         null_rows.append(dict(behavior=b, n_prompts=len(rows_i), rand_p50=float(np.median(a)), rand_p90=float(np.quantile(a, .9)),
                               rand_p99=float(np.quantile(a, .99)), rand_p999=float(np.quantile(a, .999)), rand_max=float(a.max()),
                               all_max=float(np.abs(rho).max()), all_n_ge_05=int((np.abs(rho) >= 0.5).sum()),
@@ -128,21 +134,34 @@ if os.path.exists(f"{args.s1}/prompt_level_acts.npy"):
         print(f"[promptlevel] {b}: n={len(rows_i)} max|rho|={np.abs(rho).max():.3f} #|rho|>=0.5: {(np.abs(rho)>=0.5).sum()} perm max|rho| (10k neurons) mean {np.mean(perm_max):.3f}", flush=True)
     pd.DataFrame(null_rows).to_parquet(f"{args.out}/promptlevel_null.parquet", index=False)
 
-# ---- hub candidates
-n_beh_d = np.zeros((N_LAYERS, D_MLP), np.int16); n_beh_dw = np.zeros_like(n_beh_d); n_beh_rho = np.zeros_like(n_beh_d)
-sum_d = np.zeros((N_LAYERS, D_MLP), np.float32)
-cols = {}
+# ---- hub candidates (calibrated thresholds)
+Z = lambda dt=np.int16: np.zeros((N_LAYERS, D_MLP), dt)
+n_d05, n_dw05, n_rho05 = Z(), Z(), Z()
+n_d_cal, n_dw_cal, n_rho_cal = Z(), Z(), Z()
+sum_d = Z(np.float32)
+cols, thresholds = {}, {}
 for b in behaviors:
-    n_beh_d += (hub[b]["d_pooled"] >= args.thr); n_beh_dw += (hub[b]["d_within"] >= args.thr); sum_d += hub[b]["d_pooled"]
+    thr = hub[b]["thr_d"]
+    n_d05 += (hub[b]["d_pooled"] >= args.thr); n_dw05 += (hub[b]["d_within"] >= args.thr)
+    n_d_cal += (hub[b]["d_pooled"] >= thr); n_dw_cal += (hub[b]["d_within"] >= thr)
+    sum_d += hub[b]["d_pooled"]
     cols[f"dpool_{b}"] = hub[b]["d_pooled"]; cols[f"dwithin_{b}"] = hub[b]["d_within"]
+    thresholds[b] = dict(thr_d=float(thr), n_prompts_within=hub[b]["n_prompts"])
     if b in rho_by_b:
-        n_beh_rho += (rho_by_b[b][0] >= 0.5); cols[f"rho_{b}"] = rho_by_b[b][0]
-score = n_beh_d.astype(np.float32) + n_beh_rho + 1e-3 * sum_d + 1e-6 * n_beh_dw
+        a, n, perm_max = rho_by_b[b]
+        n_rho05 += (a >= 0.5); cols[f"rho_{b}"] = a
+        thresholds[b].update(n_prompts=int(n), thr_rho=perm_max, rho_used=bool(n >= 20))
+        if n >= 20:
+            n_rho_cal += (a >= perm_max)
+json.dump(thresholds, open(f"{args.out}/hub_thresholds.json", "w"), indent=1)
+score = n_d_cal.astype(np.float32) + n_rho_cal + 1e-2 * n_dw_cal + 1e-4 * sum_d
 L, N = topk(score, 5000)
-df = pd.DataFrame(dict(layer=L, neuron=N, hub_score=score[L, N], n_beh_d_pooled_ge05=n_beh_d[L, N], n_beh_d_within_ge05=n_beh_dw[L, N],
-                       n_beh_rho_ge05=n_beh_rho[L, N], sum_maxabs_d_pooled=sum_d[L, N]))
+df = pd.DataFrame(dict(layer=L, neuron=N, hub_score=score[L, N], n_beh_d_pooled_cal=n_d_cal[L, N], n_beh_rho_cal=n_rho_cal[L, N],
+                       n_beh_d_within_cal=n_dw_cal[L, N], n_beh_d_pooled_ge05=n_d05[L, N], n_beh_d_within_ge05=n_dw05[L, N],
+                       n_beh_rho_ge05=n_rho05[L, N], sum_maxabs_d_pooled=sum_d[L, N]))
 for k, v in cols.items():
     df[k] = v[L, N]
 df.to_parquet(f"{args.out}/hub_candidates.parquet", index=False)
-print(df.head(20).to_string())
+print(json.dumps(thresholds, indent=1))
+print(df.head(20).iloc[:, :10].to_string())
 print("[summary] DONE")
