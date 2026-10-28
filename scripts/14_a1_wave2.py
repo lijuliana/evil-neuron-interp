@@ -109,6 +109,33 @@ def gen(prompts, n, max_new, seed):
     return h.chat(prompts, n=n, max_new_tokens=max_new, batch_size=args.batch, seed=seed, verbose=False)
 
 @torch.no_grad()
+def gen_multi(layer, deltas, prompts, n, max_new, seed):
+    """Sample n completions per prompt under each of several steering deltas at `layer` in shared batches.
+    deltas: list of bf16 [D] tensors on device. Returns out[c][prompt] = list of n strings. Same sampling as Harness.chat."""
+    torch.manual_seed(seed)
+    items = [(c, pi, h.prompt_ids(p)) for c in range(len(deltas)) for pi, p in enumerate(prompts) for _ in range(n)]
+    out = [[[] for _ in prompts] for _ in deltas]
+    pad = h.tok.pad_token_id
+    cur = {}
+    def hook(mod, a, o):
+        return o + cur["d"]
+    hh = h.layers[layer].mlp.down_proj.register_forward_hook(hook)
+    try:
+        for s0 in range(0, len(items), args.batch):
+            chunk = items[s0:s0 + args.batch]; T = max(len(ids) for _, _, ids in chunk)
+            inp = torch.full((len(chunk), T), pad, dtype=torch.long); att = torch.zeros((len(chunk), T), dtype=torch.long)
+            for b, (_, _, ids) in enumerate(chunk):
+                inp[b, T - len(ids):] = torch.tensor(ids); att[b, T - len(ids):] = 1
+            cur["d"] = torch.stack([deltas[c] for c, _, _ in chunk])[:, None, :]
+            g = h.model.generate(input_ids=inp.to(h.device), attention_mask=att.to(h.device), max_new_tokens=max_new, do_sample=True,
+                                 temperature=1.0, top_p=0.95, top_k=20, pad_token_id=pad, eos_token_id=[248046, 248044])
+            for b, (c, pi, _) in enumerate(chunk):
+                out[c][pi].append(h.tok.decode(g[b, T:], skip_special_tokens=True))
+    finally:
+        hh.remove()
+    return out
+
+@torch.no_grad()
 def raw_chat(prompts, n, max_new, seed):
     """No chat template: 'User: ...\\n\\nAssistant:' plain text continuation (chat-template control)."""
     torch.manual_seed(seed)
@@ -156,7 +183,7 @@ for pole in cfg:
             print(f"[wave2] skip {tag} {part}"); continue
         t0 = time.time(); fo = open(outp, "w")
         if part == "sup":
-            for b in F1 + TRANSFER:
+            for b in pole.get("sup_only", F1 + TRANSFER):
                 n = args.n_full if b in pole.get("sup_full", []) else (args.n_other if b in F1 else args.n_transfer)
                 with h.steer([(L, N, -s * sdose)]):
                     outs = gen([p for _, p in PROMPTS[b]], n, args.max_new, 300)
@@ -192,34 +219,39 @@ for pole in cfg:
                     for r, o in zip(IND, outs):
                         write_rows(fc, dict(tag="none", layer=-1, neuron=-1), "unsteered", "benign", r["id"], r["prompt"], o)
         elif part == "ctrl":
+            # 20 random same-layer neurons (rng(1234+L), shared across agents) + 20 matched-norm random directions (rng(4321+L));
+            # several controls share one generate() call via a per-row delta (decode is memory-bound, so this is ~free).
             rng = np.random.default_rng(1234 + L); rand_neurons = [int(x) for x in rng.choice(D_MLP, 20, replace=False)]
             rng2 = np.random.default_rng(4321 + L); rand_dirs = rng2.standard_normal((20, h.layers[L].mlp.down_proj.weight.shape[0])).astype(np.float32)
-            ind_p = [r["prompt"] for r in IND[:12]]; ind_id = [r["id"] for r in IND[:12]]
-            for ci, rn in enumerate(rand_neurons):
-                with h.steer([(L, rn, isg * idose)]):
-                    outs = gen(ind_p, args.n_ctrl, args.max_new_ind, 500 + ci)
-                for pid, p, o in zip(ind_id, ind_p, outs):
-                    write_rows(fo, pole, f"rand_neuron_induce{isg*idose:+.2f}", "benign", pid, p, o, dict(ctrl_neuron=rn))
-                with h.steer([(L, rn, -s * sdose)]):
-                    outs = gen([p for _, p in PROMPTS[prim]], args.n_ctrl, args.max_new, 520 + ci)
-                for (pid, p), o in zip(PROMPTS[prim], outs):
-                    write_rows(fo, pole, f"rand_neuron_push{-s*sdose:+.2f}", prim, pid, p, o, dict(ctrl_neuron=rn))
+            Wd = h.layers[L].mlp.down_proj.weight
+            def unit(v):
+                v = torch.as_tensor(v, dtype=torch.float32, device=h.device)
+                return v / v.norm()
+            ctrl_units = [("rand_neuron", dict(ctrl_neuron=rn), unit(Wd[:, rn].detach().float())) for rn in rand_neurons] + \
+                         [("rand_dir", dict(ctrl_dir=ci), unit(rand_dirs[ci])) for ci in range(20)]
+            ctrl_behs = pole.get("ctrl_behaviors", [prim])
+            ctrl_doses = pole.get("ctrl_sup_doses", [sdose])
+            jobs = []  # (condition suffix, behavior, prompts [(id, text)], signed dose, max_new)
+            if pole.get("ctrl_induce", True):
+                jobs.append(("induce", "benign", [(r["id"], r["prompt"]) for r in IND[:12]], isg * idose, args.max_new_ind))
+            for b in ctrl_behs:
+                for dz in ctrl_doses:
+                    jobs.append(("push", b, PROMPTS[b], -s * dz, args.max_new))
+            for ji, (kind, b, plist, dose, mx) in enumerate(jobs):
+                deltas = [(dose * h.resid_norms[L] * u).to(torch.bfloat16) for _, _, u in ctrl_units]
+                outs = gen_multi(L, deltas, [p for _, p in plist], args.n_ctrl, mx, 500 + 37 * ji)
+                for (cname, cmeta, _), oc in zip(ctrl_units, outs):
+                    for (pid, p), o in zip(plist, oc):
+                        write_rows(fo, pole, f"{cname}_{kind}{dose:+.2f}", b, pid, p, o, cmeta)
                 fo.flush()
-            for ci in range(20):
-                hh = steer_vec(L, rand_dirs[ci], isg * idose)
-                try:
-                    outs = gen(ind_p, args.n_ctrl, args.max_new_ind, 600 + ci)
-                finally:
-                    hh.remove()
-                for pid, p, o in zip(ind_id, ind_p, outs):
-                    write_rows(fo, pole, f"rand_dir_induce{isg*idose:+.2f}", "benign", pid, p, o, dict(ctrl_dir=ci))
-                hh = steer_vec(L, rand_dirs[ci], -s * sdose)
-                try:
-                    outs = gen([p for _, p in PROMPTS[prim]], args.n_ctrl, args.max_new, 620 + ci)
-                finally:
-                    hh.remove()
+                print(f"[wave2] {tag} ctrl {kind} {b} dose {dose:+.2f}: 40 controls x {len(plist)} x {args.n_ctrl} done; elapsed {(time.time()-T0)/60:.1f} min", flush=True)
+        elif part == "amp":
+            # push the pole itself on the primary behavior's natural prompts (does the rate rise above baseline?)
+            for dz in pole.get("amp_doses", [0.5, 1.0]):
+                with h.steer([(L, N, s * dz)]):
+                    outs = gen([p for _, p in PROMPTS[prim]], args.n_other, args.max_new, 950)
                 for (pid, p), o in zip(PROMPTS[prim], outs):
-                    write_rows(fo, pole, f"rand_dir_push{-s*sdose:+.2f}", prim, pid, p, o, dict(ctrl_dir=ci))
+                    write_rows(fo, pole, f"amp{s*dz:+.2f}", prim, pid, p, o)
                 fo.flush()
         elif part == "spec":
             rows = [r for r in S2 if r["behavior_id"] == prim]
@@ -237,6 +269,27 @@ for pole in cfg:
             acts["benign_induction"] = last_prompt_act(L, N, [r["prompt"] for r in IND])
             json.dump(dict(pole=tag, layer=L, neuron=N, last_prompt_acts=acts, prompt_ids=[r["source_prompt_id"] for r in rows]),
                       open(f"{args.out}/{tag}_spec_acts.json", "w"), indent=1)
+            # blind-maximum test: texts written from the label alone (config "blind_texts"); per-token activation, report min and max
+            if pole.get("blind_texts"):
+                bm = []
+                store = {}
+                def pre_bm(mod, a):
+                    store["x"] = a[0][0, :, N].float().cpu().numpy()
+                hb = h.layers[L].mlp.down_proj.register_forward_pre_hook(pre_bm)
+                try:
+                    with torch.no_grad():
+                        for bt in pole["blind_texts"]:
+                            if bt["kind"] == "chat":
+                                ids = h.prompt_ids([{"role": "user", "content": bt["user"]}]) + (h.tok(bt["assistant"], add_special_tokens=False)["input_ids"] if bt.get("assistant") else [])
+                            else:
+                                ids = h.tok(bt["text"], add_special_tokens=False)["input_ids"]
+                            h.lm(input_ids=torch.tensor([ids], device=h.device), use_cache=False)
+                            x = store["x"]; jmin, jmax = int(x.argmin()), int(x.argmax())
+                            bm.append(dict(bt, min=float(x[jmin]), min_token=h.tok.decode([ids[jmin]]), min_left=h.tok.decode(ids[max(0, jmin - 12):jmin]),
+                                           max=float(x[jmax]), max_token=h.tok.decode([ids[jmax]]), n_tokens=len(ids)))
+                finally:
+                    hb.remove()
+                json.dump(bm, open(f"{args.out}/{tag}_blindmax.json", "w"), indent=1, ensure_ascii=False)
             # capability mini
             capp = [c["prompt"] for c in CAP]
             with h.steer([(L, N, isg * idose)]):

@@ -188,7 +188,7 @@ for pole in poles:
         print(f"[wave1] skip {tag}"); continue
     t0 = time.time()
     fo = open(outp, "w")
-    w = h.layers[L].mlp.down_proj.weight[:, N].float().cpu().numpy()
+    w = h.layers[L].mlp.down_proj.weight[:, N].detach().float().cpu().numpy()
     cos = float(np.dot(w, axis[L]) / (np.linalg.norm(w) * np.linalg.norm(axis[L]) + 1e-9)) if axis is not None else None
     ks = {}
     for dose in sorted({d * sg for d in set(args.sup_doses) | set(args.ind_doses) for sg in (1, -1)}):
