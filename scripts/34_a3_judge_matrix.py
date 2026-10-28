@@ -38,8 +38,11 @@ ap.add_argument("--neg-frac", type=float, default=0.10)
 ap.add_argument("--no-escalate", action="store_true")
 ap.add_argument("--concurrency", type=int, default=24)
 ap.add_argument("--fake", action="store_true", help="debug: random fake judgments, no API")
+ap.add_argument("--sonnet-model", default="claude-sonnet-5-5")
+ap.add_argument("--sonnet-behaviors", default="claims-called-911", help="comma list: all cells of these behaviors get a second-model pass")
 args = ap.parse_args()
 T0 = time.time()
+LOOP = asyncio.new_event_loop(); asyncio.set_event_loop(LOOP)  # one loop for every pass (the Judge semaphore/client bind to it)
 CACHE = os.path.join(REPO, "runs", "judge_cache", "a3_typed")
 os.makedirs(CACHE, exist_ok=True)
 SUP_PHASES = ["none", "suppress", "controls", "chem"]
@@ -161,7 +164,7 @@ async def judge_rows(idx):
             df.loc[i, "ind_behaviors"] = json.dumps([b for b in (d.get("behaviors") or []) if b in BEHAVIORS])
             for k in ("nonassistant_self_claim", "hallucinated_context_or_role", "hostile", "refusal", "coherent"):
                 df.loc[i, f"ind_{k}"] = bool(d.get(k, False))
-    mt = df.loc[idx]; mt = mt[(mt.j_match == True) & mt.j_coherent.isna()]
+    mt = df.loc[idx]; mt = mt[((mt.j_match == True) | (mt.j_match_s == True)) & mt.j_coherent.isna()]
     if len(mt):
         print(f"[judge] coherence judging {len(mt)} matched samples", flush=True)
         outs = await asyncio.gather(*(custom_call(COHERENCE_PROMPT.format(user=r.prompt, assistant=r.response), "coh_v1") for r in mt.itertuples()))
@@ -170,7 +173,7 @@ async def judge_rows(idx):
                 df.loc[i, "j_coherent"] = bool(d.get("coherent", True)); df.loc[i, "j_refusal"] = bool(d.get("refusal", False))
     print(f"[judge] API calls so far {judge.n_calls}, usage {judge.usage}, {time.time()-T0:.0f}s", flush=True)
 
-for c in ("j_match", "j_error", "ind_behaviors", "j_coherent", "j_refusal", "ind_nonassistant_self_claim",
+for c in ("j_match", "j_error", "j_match_s", "j_error_s", "ind_behaviors", "j_coherent", "j_refusal", "ind_nonassistant_self_claim",
           "ind_hallucinated_context_or_role", "ind_hostile", "ind_refusal", "ind_coherent"):
     df[c] = pd.Series([np.nan] * len(df), index=df.index, dtype=object)
 
@@ -185,7 +188,7 @@ if args.fake:
     df.loc[sel, "ind_coherent"] = True
     df.loc[df.j_match == True, "j_coherent"] = True
 else:
-    asyncio.run(judge_rows(df.index[df.selected]))
+    LOOP.run_until_complete(judge_rows(df.index[df.selected]))
 
 
 # ------------------------------------------------------------------ 4. typing + cell estimates
@@ -202,7 +205,8 @@ def typed(r):
         if not coh:
             return "degenerate"
         return "coherent_match" if m else "no_match"
-    m = r.h_match if pd.isna(r.j_match) else bool(r.j_match)
+    jm = r.j_match_s if not pd.isna(r.j_match_s) else r.j_match
+    m = r.h_match if pd.isna(jm) else bool(jm)
     if m:
         coh = (True if pd.isna(r.j_coherent) else bool(r.j_coherent)) and not r.h_degenerate
         return "coherent_match" if coh else "incoherent_match"
@@ -295,9 +299,27 @@ if not args.no_escalate and not args.fake and len(M):
             sel |= (df.cond == r.cond) & (df.behavior == r.behavior) & df.phase.isin(SUP_PHASES)
             sel |= (df.phase.isin(["none", "controls"])) & (df.behavior == r.behavior)
         df.loc[sel, "selected"] = True
-        asyncio.run(judge_rows(df.index[sel]))
+        LOOP.run_until_complete(judge_rows(df.index[sel]))
         cells, M = build()
-M["judge_model"] = JUDGE_MODEL; M["decisive"] = M.passes_30pct_screen & M.phase.isin(["suppress", "chem"]); M["neg_sample_frac"] = args.neg_frac
+# ---- second-model pass: all cells of --sonnet-behaviors, plus decisive cells and their unsteered cell (same sampled rows)
+if not args.fake and len(M):
+    sb = [b for b in args.sonnet_behaviors.split(",") if b]
+    sel = df.selected & df.phase.isin(SUP_PHASES) & df.behavior.isin(sb)
+    for r in M[M.passes_30pct_screen & M.phase.isin(["suppress", "chem"])].itertuples():
+        sel |= df.selected & (((df.cond == r.cond) & (df.behavior == r.behavior)) | ((df.phase == "none") & (df.behavior == r.behavior)))
+    rows = df[sel & df.j_match_s.isna()]
+    if len(rows):
+        print(f"[judge] second pass ({args.sonnet_model}) on {len(rows)} rows", flush=True)
+        sj = Judge(rubrics, model=args.sonnet_model, concurrency=args.concurrency)
+        res = LOOP.run_until_complete(sj.judge_many([(r.behavior, [{"role": "user", "content": r.prompt}, {"role": "assistant", "content": r.response}]) for r in rows.itertuples()], progress_every=500))
+        df.loc[rows.index, "j_match_s"] = [r.match for r in res]; df.loc[rows.index, "j_error_s"] = [r.error for r in res]
+        print(f"[judge] second-pass calls {sj.n_calls}, usage {sj.usage}", flush=True)
+        LOOP.run_until_complete(judge_rows(rows.index))
+        cells, M = build()
+sonnet_cells = set(df[df.j_match_s.notna()].cell)
+M["judge_model"] = [args.sonnet_model if f"{r.phase}|{r.cond}|{r.behavior}" in sonnet_cells else JUDGE_MODEL for r in M.itertuples()]
+M["baseline_judge_model"] = [args.sonnet_model if f"none|none|{r.behavior}" in sonnet_cells else JUDGE_MODEL for r in M.itertuples()]
+M["decisive"] = M.passes_30pct_screen & M.phase.isin(["suppress", "chem"]); M["neg_sample_frac"] = args.neg_frac
 M["sonnet_second_opinion"] = "pending"
 os.makedirs(os.path.join(args.out, "a3_battery"), exist_ok=True)
 df.to_parquet(os.path.join(args.out, "a3_battery", "judged.parquet"), index=False)

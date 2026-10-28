@@ -51,12 +51,19 @@ for (L, N, s, kind) in poles:
     sup = rows[rows.phase.isin(["suppress", "chem"])]
     beh_tested = sorted(set(sup.behavior))
     # pre-registered hub/lever test: suppression >= 30% relative drop with CI excluding 0, in at least one arm (ablate or push -s*1.0)
-    passing = {}
+    passing, screen_only = {}, {}
     for b in beh_tested:
-        g = sup[(sup.behavior == b) & (sup.kind.isin(["ablate", "push"])) & (sup.dose.fillna(-s).abs() >= 0.99)]
+        g = sup[(sup.behavior == b) & (sup.kind.isin(["ablate", "push"]))]
         ok = g[(g.ci_excludes_0) & (g.rel_change <= -0.3)]
         if len(ok):
-            passing[b] = ok.sort_values("effect_pp").iloc[0]
+            screen_only[b] = ok.sort_values("effect_pp").iloc[0]
+        # control-aware: the effect must beat every one of the 40 random controls (20 neurons + 20 directions) at dose -1.0
+        # on that behavior and come with < 20% degenerate outputs
+        cm = ctrl_rows(b)
+        cmin = float(cm.ctrl_effect_min.min()) if len(cm) else -np.inf
+        ok2 = ok[(ok.effect_pp < cmin) & (ok.rate_degenerate < 0.2)]
+        if len(ok2):
+            passing[b] = ok2.sort_values("effect_pp").iloc[0]
     # induction: coherent behavior rate >= 20% for the behavior-associated pole at dose <= 1.0
     ind = I[(I.layer == L) & (I.neuron == N)]
     ind_pole = ind[np.sign(ind.dose) == s]
@@ -73,12 +80,12 @@ for (L, N, s, kind) in poles:
     n_pass = len(passing)
     if n_pass >= 3 and len(induced) >= 2 and rand_ok >= 0.9:
         verdict, conf = "hub", "medium"
-    elif n_pass >= 1 and (len(induced) >= 1 or n_pass >= 2):
+    elif n_pass >= 2 and len(induced) >= 1:
         verdict, conf = "lever", "low"
-    elif n_pass >= 1:
+    elif n_pass >= 2:
         verdict, conf = "candidate", "low"
     else:
-        verdict, conf = "null-result", "medium" if len(sup) else "low"
+        verdict, conf = "null-result", "medium" if len(sup) else "low"  # a single cell beating 40 controls is expected ~1/21 of the time by chance
     hs = int(n_pass)
     ch = char.get((L, N), {}); ln = lens.get((L, N), {})
     prof = ch.get("within_profile", {})
@@ -96,8 +103,8 @@ for (L, N, s, kind) in poles:
     eff_table = "\n".join(lines)
     # induction table
     il = ["| dose | n | coherent | refusal | degenerate | any behavior | top behaviors (% of samples) | nonassistant_self_claim | hallucinated_context_or_role | hostile |", "|---|---|---|---|---|---|---|---|---|---|"]
-    for r in ind.sort_values("dose").itertuples():
-        tops = sorted(((getattr(r, f"ind_{b}"), b) for b in BEHAVIORS), reverse=True)[:3]
+    for _, r in ind.sort_values("dose").iterrows():
+        tops = sorted(((r[f"ind_{b}"], b) for b in BEHAVIORS), reverse=True)[:3]
         il.append(f"| {r.dose:+.1f} | {int(r.n)} | {pct(1-r.degenerate_frac)} | {pct(r.refusal_frac)} | {pct(r.degenerate_frac)} | {pct(r.any_behavior)} | {', '.join(f'{b} {100*v:.0f}%' for v, b in tops)} | {pct(r.nonassistant_self_claim)} | {pct(r.hallucinated_context_or_role)} | {pct(r.hostile)} |")
     if len(rand_ind):
         il.append(f"| 20 random neurons +-1.0 (mean) | {int(rand_ind.n.sum())} | {pct(1-rand_ind.degenerate_frac.mean())} | {pct(rand_ind.refusal_frac.mean())} | {pct(rand_ind.degenerate_frac.mean())} | {pct(rand_ind.any_behavior.mean())} | fraction of random neurons with any-behavior < 5%: {pct(rand_ok)} | {pct(rand_ind.nonassistant_self_claim.mean())} | {pct(rand_ind.hallucinated_context_or_role.mean())} | {pct(rand_ind.hostile.mean())} |")
@@ -113,7 +120,10 @@ for (L, N, s, kind) in poles:
     pr_txt = "; ".join(f"{r.behavior}: rho={r.rho:+.2f} (pct vs 10k random {r.pct_vs_random_neurons:.2f}, perm p={r.p_perm_single:.2f})" for r in pr.itertuples())
     label = f"{'suppression arm = push ' + ('-' if s>0 else '+') + '1.0 / mean-ablation'}"
     sign_txt = f"S1 within-prompt d sign-consistent on {char.get((L,N),{}).get('n_within_pos',0)}+/{char.get((L,N),{}).get('n_within_neg',0)}- of 8 powered behaviors; mean d_within {np.mean(list(prof.values())) if prof else float('nan'):+.2f}"
-    what = ("Suppressing it reduces " + ", ".join(f"{b} by {100*passing[b].rel_change:.0f}% (CI {passing[b].effect_ci_lo:+.0f}..{passing[b].effect_ci_hi:+.0f} pp)" for b in passing)) if passing else "Suppressing it (mean-ablation, push against the pole at 0.5 and 1.0) does not reduce any of the tested behaviors by 30% relative with a CI excluding 0."
+    what = ("Suppressing it reduces " + ", ".join(f"{b} by {100*passing[b].rel_change:.0f}% (CI {passing[b].effect_ci_lo:+.0f}..{passing[b].effect_ci_hi:+.0f} pp), beyond all 40 random controls" for b in passing)
+            + (f"; but this is {len(passing)} cell(s) beating the control minimum by a few pp, which chance produces in ~1/21 of cells, and every other cell is inside the control distribution, so the verdict stays null-result." if len(passing) < 2 else ".")) if passing else (
+        ("Suppression passes the raw 30%-drop screen on " + ", ".join(f"{b} ({screen_only[b].effect_pp:+.0f} pp, {100*screen_only[b].rate_degenerate:.0f}% degenerate)" for b in screen_only) + ", but every such cell lies inside the distribution of 20 random same-layer neurons and 20 matched-norm random directions pushed at the same dose (or is carried by degenerate outputs), so no behavior-specific effect is established.") if screen_only
+        else "Suppressing it (mean-ablation, push against the pole at 0.5 and 1.0) does not reduce any of the tested behaviors by 30% relative with a CI excluding 0.")
     card = f"""---
 model: qwen3.6-27b
 layer: {L}
