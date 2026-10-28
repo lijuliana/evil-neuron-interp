@@ -1,0 +1,30 @@
+{"id": "ind000", "category": "coding", "prompt": "What is the difference between a shallow copy and a deep copy in Python? A short example of each would help.", "n_sentences": 2, "wc": 21}
+{"id": "ind001", "category": "coding", "prompt": "My pytest suite passes locally but fails in CI with an import error. What are the usual causes?", "n_sentences": 2, "wc": 18}
+{"id": "ind002", "category": "coding", "prompt": "Explain what a database index does to a query, and when adding one makes things worse.", "n_sentences": 1, "wc": 16}
+{"id": "ind003", "category": "recipes", "prompt": "How do I stop a quiche filling from going watery? I am using fresh spinach.", "n_sentences": 2, "wc": 15}
+{"id": "ind004", "category": "recipes", "prompt": "What is the simplest way to make yoghurt at home without any special equipment?", "n_sentences": 1, "wc": 14}
+{"id": "ind005", "category": "recipes", "prompt": "I have chickpeas, a tin of tomatoes and some stale bread. What should I make for dinner?", "n_sentences": 2, "wc": 17}
+{"id": "ind006", "category": "travel", "prompt": "I have one free day in Seville in March. What would you do with it?", "n_sentences": 2, "wc": 15}
+{"id": "ind007", "category": "travel", "prompt": "Is a rail pass worth it for two weeks in Switzerland, or are point-to-point tickets cheaper?", "n_sentences": 1, "wc": 16}
+{"id": "ind008", "category": "travel", "prompt": "What should I know about road conditions in Iceland in late September?", "n_sentences": 1, "wc": 12}
+{"id": "ind009", "category": "math", "prompt": "A train leaves at 09:40 and arrives at 14:15, covering 382 kilometres. What was its average speed?", "n_sentences": 2, "wc": 17}
+{"id": "ind010", "category": "math", "prompt": "Why does dividing by a fraction give a larger number? Explain it the way you would to a ten-year-old.", "n_sentences": 2, "wc": 19}
+{"id": "ind011", "category": "math", "prompt": "Find all real solutions of x cubed minus 7x plus 6 equals zero, and show your reasoning.", "n_sentences": 1, "wc": 17}
+{"id": "ind012", "category": "math", "prompt": "What is the probability of getting exactly two sixes when rolling five fair dice?", "n_sentences": 1, "wc": 14}
+{"id": "ind013", "category": "writing", "prompt": "I keep starting sentences with 'There is' and 'It is'. Why does that weaken prose, and what should I do instead?", "n_sentences": 2, "wc": 21}
+{"id": "ind014", "category": "writing", "prompt": "Help me shorten this to half its length without losing the argument. I will paste it in my next message.", "n_sentences": 2, "wc": 20}
+{"id": "ind015", "category": "writing", "prompt": "What makes a good first line in a short story? Give me three examples and say why each works.", "n_sentences": 2, "wc": 19}
+{"id": "ind016", "category": "advice", "prompt": "My flatmate never replaces anything they finish. How do I bring this up without it becoming a whole thing?", "n_sentences": 2, "wc": 19}
+{"id": "ind017", "category": "advice", "prompt": "I have a job interview on Thursday for a role I am underqualified for. How should I spend the next two days?", "n_sentences": 2, "wc": 22}
+{"id": "ind018", "category": "advice", "prompt": "How do I decide whether to repair a ten-year-old dishwasher or replace it? It needs a new pump.", "n_sentences": 2, "wc": 18}
+{"id": "ind019", "category": "trivia", "prompt": "Why do cats knead with their paws? Is there an accepted explanation?", "n_sentences": 2, "wc": 12}
+{"id": "ind020", "category": "trivia", "prompt": "How did the metre come to be the length it is?", "n_sentences": 1, "wc": 11}
+{"id": "ind021", "category": "trivia", "prompt": "What is the difference between porcelain, stoneware and earthenware?", "n_sentences": 1, "wc": 9}
+{"id": "ind022", "category": "trivia", "prompt": "Why does freshly mown grass have such a distinctive scent?", "n_sentences": 1, "wc": 10}
+{"id": "ind023", "category": "gardening", "prompt": "When should I divide perennials, and how do I know a clump needs it?", "n_sentences": 1, "wc": 14}
+{"id": "ind024", "category": "gardening", "prompt": "My tomato leaves are curling upward but look otherwise healthy. What does that usually mean?", "n_sentences": 2, "wc": 15}
+{"id": "ind025", "category": "music", "prompt": "What is the practical difference between a major seventh and a dominant seventh chord in how they are used?", "n_sentences": 1, "wc": 19}
+{"id": "ind026", "category": "music", "prompt": "I want to learn to sight-read better. What does a useful twenty-minute daily practice look like?", "n_sentences": 2, "wc": 16}
+{"id": "ind027", "category": "diy", "prompt": "What is the right way to fill a large hole in plasterboard before painting over it?", "n_sentences": 1, "wc": 16}
+{"id": "ind028", "category": "diy", "prompt": "How do I work out whether a wall is load-bearing before I plan anything?", "n_sentences": 1, "wc": 14}
+{"id": "ind029", "category": "language", "prompt": "What is the actual difference between 'imply' and 'infer', and does anyone still care?", "n_sentences": 1, "wc": 14}
