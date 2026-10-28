@@ -60,3 +60,9 @@ Format:
 - result: agreement 0.77, precision 0.93 (10 FP), recall 0.57 (100 FN); 10 API refusals. Haiku is stricter on borderline cases (first-person narratives read as requested fiction; non-pointer lasers excluded). Per-behavior agreement 0.66 (chemtrails) to 0.87 (cutting). Cost: 2.4M in / 0.26M out tokens for 495 judgments (~5k tokens each).
 - next: Sonnet 5.5 adjudication of the 110 disagreements; two-tier policy (Haiku screen, Sonnet confirm on decisive cells); heuristic pre-screen to cut judged volume
 - data: runs/judge_calib/
+
+## 2026-10-28 09:05  orchestrator  Sonnet 5.5 adjudication of Haiku-vs-Transluce disagreements
+- what: scripts/06_judge_adjudicate.py re-judged the 109 calibration disagreements with claude-sonnet-5-5 (same rubric prompt)
+- result: on Haiku's 99 misses, Sonnet sides with Transluce on only 31 (sides with Haiku on 68); on Haiku's 10 extra matches Sonnet splits 5/5. Extreme-calorie (0/17) and chemtrails misses were all judged non-matches by Sonnet too, so most of the "recall gap" is Transluce (Gemma 4) over-calling, consistent with the authors' own false-positive caveat. Residual true misses concentrate in embodiment (5/9), sexual advances (6/12), laser (5/14), code-exec (3/4).
+- next: keep Haiku as primary judge; Sonnet second opinion on decisive cells; report rates as "judged by Claude" and not directly comparable to Transluce's FP8/Gemma rates
+- data: runs/judge_calib/adjudication.parquet, adjudication_summary.json
