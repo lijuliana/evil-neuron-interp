@@ -27,36 +27,42 @@ pa = pd.read_parquet(os.path.join(a.data, "patterns.parquet"))
 pa = pa[pa.subject_model == "qwen/qwen3.6-27b"]
 judge = Judge(rubrics, dry_run=a.dry_run, concurrency=a.concurrency)
 table = []
-for f in sorted(glob.glob(os.path.join(a.samples, "*.jsonl"))):
-    if f.endswith(".judged.jsonl"):
-        continue
-    behavior = os.path.basename(f)[:-6]
-    recs = [json.loads(l) for l in open(f)]
-    for r in recs:
-        h = judge_heuristic(behavior, r["prompt"], r["response"])
-        r["heur_match"], r["heur_explanation"] = h["match"], h["explanation"]
-        r["judge_match"] = r["judge_error"] = r["judge_explanation"] = None
-    sel = [r for r in recs if r["sample_idx"] < a.per_prompt]
-    items = [(behavior, [{"role": "user", "content": r["prompt"]}, {"role": "assistant", "content": r["response"]}]) for r in sel]
-    print(f"[{behavior}] judging {len(items)} of {len(recs)}", flush=True)
-    res = asyncio.run(judge.judge_many(items))
-    for r, j in zip(sel, res):
-        r["judge_match"], r["judge_error"], r["judge_explanation"] = j.match, j.error, j.explanation
-    with open(os.path.join(a.samples, f"{behavior}.judged.jsonl"), "w") as fo:
-        for r in recs:
-            fo.write(json.dumps(r) + "\n")
-    judged = [r for r in recs if r["judge_match"] is not None]
-    k = sum(bool(r["judge_match"]) for r in judged); n = len(judged)
-    lo, hi = wilson(k, n)
-    hk = sum(bool(r["heur_match"]) for r in recs)
-    fp8 = pa[pa.behavior_id == behavior]
-    fp8_rate = float(sum(m["matched_samples"] for m in fp8.metrics) / max(sum(m["total_samples"] for m in fp8.metrics), 1))
-    byp = {r["prompt_id"]: r for r in recs}
-    ref_k = sum(r.get("ref_n_matched", 0) for r in byp.values()); ref_n = sum(r.get("ref_n_samples", 0) for r in byp.values())
-    table.append(dict(behavior=behavior, n_prompts=len(byp), n_judged=n, bf16_matched=k, bf16_rate=k / n if n else None,
-                      wilson_lo=lo, wilson_hi=hi, heur_rate_all=hk / len(recs),
-                      fp8_same_prompts_rate=ref_k / ref_n if ref_n else None, fp8_all_patterns_rate=fp8_rate))
-    print(table[-1], flush=True)
+
+
+async def main():
+  for f in sorted(glob.glob(os.path.join(a.samples, "*.jsonl"))):
+      if f.endswith(".judged.jsonl"):
+          continue
+      behavior = os.path.basename(f)[:-6]
+      recs = [json.loads(l) for l in open(f)]
+      for r in recs:
+          h = judge_heuristic(behavior, r["prompt"], r["response"])
+          r["heur_match"], r["heur_explanation"] = h["match"], h["explanation"]
+          r["judge_match"] = r["judge_error"] = r["judge_explanation"] = None
+      sel = [r for r in recs if r["sample_idx"] < a.per_prompt]
+      items = [(behavior, [{"role": "user", "content": r["prompt"]}, {"role": "assistant", "content": r["response"]}]) for r in sel]
+      print(f"[{behavior}] judging {len(items)} of {len(recs)}", flush=True)
+      res = await judge.judge_many(items)
+      for r, j in zip(sel, res):
+          r["judge_match"], r["judge_error"], r["judge_explanation"] = j.match, j.error, j.explanation
+      with open(os.path.join(a.samples, f"{behavior}.judged.jsonl"), "w") as fo:
+          for r in recs:
+              fo.write(json.dumps(r) + "\n")
+      judged = [r for r in recs if r["judge_match"] is not None]
+      k = sum(bool(r["judge_match"]) for r in judged); n = len(judged)
+      lo, hi = wilson(k, n)
+      hk = sum(bool(r["heur_match"]) for r in recs)
+      fp8 = pa[pa.behavior_id == behavior]
+      fp8_rate = float(sum(m["matched_samples"] for m in fp8.metrics) / max(sum(m["total_samples"] for m in fp8.metrics), 1))
+      byp = {r["prompt_id"]: r for r in recs}
+      ref_k = sum(r.get("ref_n_matched", 0) for r in byp.values()); ref_n = sum(r.get("ref_n_samples", 0) for r in byp.values())
+      table.append(dict(behavior=behavior, n_prompts=len(byp), n_judged=n, bf16_matched=k, bf16_rate=k / n if n else None,
+                        wilson_lo=lo, wilson_hi=hi, heur_rate_all=hk / len(recs),
+                        fp8_same_prompts_rate=ref_k / ref_n if ref_n else None, fp8_all_patterns_rate=fp8_rate))
+      print(table[-1], flush=True)
+
+
+asyncio.run(main())
 df = pd.DataFrame(table)
 df.to_csv(os.path.join(a.samples, "baseline_rates.csv"), index=False)
 print(df.to_string()); print("usage", judge.usage)
