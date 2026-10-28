@@ -1,0 +1,12 @@
+.venv/
+data/
+runs/
+captures/
+models/
+*.npz
+*.npy
+*.pt
+*.safetensors
+__pycache__/
+.DS_Store
+.env
