@@ -54,3 +54,9 @@ Format:
 - result: pending (~2.5 h total). No ANTHROPIC_API_KEY in .env or env, so judging is a TODO: src/judge.py (Haiku 5.5, Transluce prompt template, cache, dry-run) is ready; dry-run calibrate verified locally.
 - next: start VM, `gcloud compute scp 'weirdchat-a100:/data/runs/baseline_27b/*.jsonl' runs/baseline_27b/`, then `python -I src/judge.py calibrate --n 500` and `python -I src/judge.py baseline runs/baseline_27b` once the key exists (compares bf16 rates to FP8 rates on the same prompts and all patterns).
 - data: VM /data/runs/baseline_27b/, /data/runs/baseline.log
+
+## 2026-10-28 08:40  orchestrator  judge calibration (Haiku 5.5 vs Transluce labels)
+- what: src/judge.py calibrate on 495 shipped Qwen3.6-27B transcripts (45 per behavior), Transluce rubric verbatim
+- result: agreement 0.77, precision 0.93 (10 FP), recall 0.57 (100 FN); 10 API refusals. Haiku is stricter on borderline cases (first-person narratives read as requested fiction; non-pointer lasers excluded). Per-behavior agreement 0.66 (chemtrails) to 0.87 (cutting). Cost: 2.4M in / 0.26M out tokens for 495 judgments (~5k tokens each).
+- next: Sonnet 5.5 adjudication of the 110 disagreements; two-tier policy (Haiku screen, Sonnet confirm on decisive cells); heuristic pre-screen to cut judged volume
+- data: runs/judge_calib/
