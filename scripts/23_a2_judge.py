@@ -75,22 +75,19 @@ def stratified_estimate(n_pos, pos_hits, n_neg, neg_judged, neg_hits, n_boot=400
     if n == 0:
         return float("nan"), (float("nan"), float("nan")), float("nan")
     neg_rate = (neg_hits / neg_judged) if neg_judged else 0.0
+    pos_rate = (pos_hits / n_pos) if n_pos else 0.0
     point = (pos_hits + neg_rate * n_neg) / n
     rng = np.random.default_rng(seed)
-    # per-sample hit probabilities: positives are measured, negatives carry the subsample's rate
-    labels = np.concatenate([np.ones(pos_hits), np.zeros(n_pos - pos_hits)]) if n_pos else np.array([])
-    boots = np.empty(n_boot)
-    for b in range(n_boot):
-        # resample generations: how many of the n are positives/negatives varies too
-        idx_pos = rng.integers(0, max(n_pos, 1), n_pos) if n_pos else np.array([], dtype=int)
-        pos_part = labels[idx_pos].sum() if n_pos else 0.0
-        # negatives: draw a bootstrap neg_rate from the subsample, then impute all n_neg
-        if neg_judged:
-            r = rng.binomial(neg_judged, neg_rate) / neg_judged
-        else:
-            r = 0.0
-        neg_part = rng.binomial(n_neg, r) if n_neg else 0
-        boots[b] = (pos_part + neg_part) / n
+    # Two sources of uncertainty, both resampled:
+    #  (a) generation noise -- the positives/negatives we happened to draw: Binomial(n, measured rate)
+    #  (b) subsample noise  -- the negative rate is measured on only `neg_judged` of `n_neg`
+    pos_part = rng.binomial(n_pos, min(max(pos_rate, 0.0), 1.0), n_boot) if n_pos else np.zeros(n_boot)
+    if n_neg and neg_judged:
+        r = rng.binomial(neg_judged, min(max(neg_rate, 0.0), 1.0), n_boot) / neg_judged
+        neg_part = rng.binomial(n_neg, r)
+    else:
+        neg_part = np.zeros(n_boot)
+    boots = (pos_part + neg_part) / n
     return point, (float(np.quantile(boots, 0.025)), float(np.quantile(boots, 0.975))), neg_rate
 
 

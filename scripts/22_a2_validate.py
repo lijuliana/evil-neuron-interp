@@ -416,7 +416,12 @@ elif args.job == "attrib":
         for i in range(len(h.layers)):
             def pre(mod, a, i=i):
                 x = a[0]
-                x.requires_grad_(True)     # x is a leaf: all params have requires_grad=False
+                # Layer 0's x is a graph leaf (all params frozen), but once it requires grad every
+                # later layer's x is a NON-leaf, whose .grad PyTorch does not populate unless we ask.
+                # Without retain_grad() only layer 0 gets gradients (the bug in the first attrib run).
+                if not x.requires_grad:
+                    x.requires_grad_(True)
+                x.retain_grad()
                 store[i] = x
                 return (x,) + tuple(a[1:])
             hooks.append(h.layers[i].mlp.down_proj.register_forward_pre_hook(pre))
