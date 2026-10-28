@@ -12,8 +12,8 @@
 - Phase 0 harness: A0 DONE 2026-10-28. src/harness.py (chat/calibrate/steer/clamp/ablate_mean/capture_batch/capture_prompt_level) verified on GCP `weirdchat-a100` (us-central1-a, a2-ultragpu-1g). Env in runs/a0_env.md. Gen 477 tok/s @batch 64; capture ~9 transcripts/s. STOP THE VM when idle.
 - Phase 0 S1 capture: A0 ran scripts/03_a0_s1_capture.py over all 27B transcripts -> VM /data/captures/s1 (behavior/, shuffled/, prompt/ npz + prompt_level_acts.npy); summaries in captures/s1/ locally (see findings/LOG.md for numbers).
 - Phase 0 baseline replication: A0 sampled 20 prompts x 64 per behavior in bf16 (runs/baseline_27b/*.jsonl). JUDGING PENDING: no ANTHROPIC_API_KEY in .env; run `python -I src/judge.py calibrate` then `python -I src/judge.py baseline` once the key exists (src/judge.py has cache + dry-run).
-- Phase 1 screens: not started
-- Phase 2 validation: not started
+- Phase 1 screens: S1 DONE (captures/s1/summary). S2 (clause deletion) runs inside A2. S4 lens readouts inside A1-A3. S5 (4B exhaustive) replaced by poor-things.com priors (A4b).
+- Phase 2 validation: A1 (F1 misrepresentation), A2 (F2 harmful compliance + Goodfire replication), A3 (cross-family hubs + chemtrails) launched 2026-10-28 ~08:00 UTC; GPU shared via flock; VM auto-stops after 30 idle minutes.
 - Lit review (A6): running
 - Meta-model brainstorm (A7): running
 
