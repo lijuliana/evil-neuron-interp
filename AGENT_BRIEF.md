@@ -34,3 +34,14 @@ Sampling for behavior rates: no system prompt, thinking disabled, temperature 1.
 - Lead with the strongest evidence, then what would break it.
 - Harmful generations: keep in data/ or runs/, quote at most 3 short examples inside <details> blocks in a card.
 - Finish by appending to findings/LOG.md and returning a <= 300-word summary with: what you ran, headline numbers, cards written (paths), blockers.
+
+## Design rules added 2026-10-28 after the lit review (lit/review.md, lit/controls_table.md) and A7's brainstorm
+- Prefill is deterministic (no system prompt, thinking off). Same-prompt rollouts have identical activations at the last prompt token and the pre-first-token position. Within-prompt matched-vs-unmatched contrasts are only valid from assistant token 1 onward; the last-prompt-token signal is a BETWEEN-prompt correlation with each prompt's 64-rollout match rate (captures/s1/prompt_level_*).
+- Matched-norm random DIRECTIONS are a required control alongside random same-layer neurons (random directions are known to produce identity flips; neuron write-columns have unusual norms, so "random neuron at same dose" is the weaker control). Use >= 20 of each.
+- Keystone filter: before scoring a candidate as a lever or hub, check that ablating/pushing it does not collapse the model generally (perplexity on held-out text within 1.5x of baseline at the dose used; distinct-4-gram ratio within 10% of baseline). Collapse neurons are reported as such, never as levers.
+- Typed judging: score each sample as {behavior present and coherent, behavior present but incoherent, no behavior, refusal, degenerate}. Only "present and coherent" counts toward a rate.
+- F1 (misrepresentation) must include a chat-template control: the AI-disclaimer voice is partly switched by the chat template itself (Maczan 2026). Test candidates both with and without the template on at least 5 prompts.
+- F2 must begin by reproducing Goodfire's drunk-driving "sober one" clause deletion on Qwen3.6-27B (rate with vs without the clause, 64 samples each) before any neuron claims. Present F2 results as a controlled replication and extension.
+- Explanation claims (labels) need a noise floor: for every labelled neuron also label 5 random same-layer neurons by the same procedure and report how often the procedure produces a confident label for noise.
+- Attribution rankings (gradient x activation gap) are shortlists only; Hedwig and Liu both found they disagree with activation-contrast rankings. Report both ranks on every card.
+- Always compute and report the Assistant-Axis-style readout (cosine between W_down[:, n] and the mean difference between assistant-mode and persona-mode residuals, once A1 computes that direction) so identity neurons can be compared to the known persona direction.
