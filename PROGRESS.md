@@ -8,6 +8,8 @@
 - Output: blog/forum post in ~1 week. Findings as Neuron Cards in findings/, REGISTRY.md, LOG.md, commits per milestone, plus a Claude Doc.
 - Autonomy: fully autonomous within budget.
 
+- 2026-10-28 evening: change of direction (Juliana). Focus moves to Agastya's fork-based mediating neurons, O-lens readouts over all tokens, and a per-token viewer; see PLAN.md. Lever sweep (A8) stopped; A1/A2 told to wrap up with no new GPU work.
+
 ## Phase status
 - Phase 0 harness: A0 DONE 2026-10-28. src/harness.py (chat/calibrate/steer/clamp/ablate_mean/capture_batch/capture_prompt_level) verified on GCP `weirdchat-a100` (us-central1-a, a2-ultragpu-1g). Env in runs/a0_env.md. Gen 477 tok/s @batch 64; capture ~9 transcripts/s. STOP THE VM when idle.
 - Phase 0 S1 capture: A0 ran scripts/03_a0_s1_capture.py over all 27B transcripts -> VM /data/captures/s1 (behavior/, shuffled/, prompt/ npz + prompt_level_acts.npy); summaries in captures/s1/ locally (see findings/LOG.md for numbers).

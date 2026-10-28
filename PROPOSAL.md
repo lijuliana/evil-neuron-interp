@@ -1,3 +1,5 @@
+> Superseded 2026-10-28 by PLAN.md (fork-based mediators + readouts + viewer). Kept as the record of the original design.
+
 # Proposal: Hub neurons for WeirdChat behaviors in Qwen3.6
 
 Status: DRAFT for approval (2026-10-28). Nothing below has been run yet except data download and environment setup.
