@@ -9,8 +9,13 @@
 - Autonomy: fully autonomous within budget.
 
 ## Phase status
-- Phase 0 harness: not started
+- Phase 0 harness: A0 running on GCP `weirdchat-a100` (us-central1-a, a2-ultragpu-1g, created 2026-10-28). STOP IT when idle.
 - Phase 1 screens: not started
 - Phase 2 validation: not started
-- Lit review (A6): not started
-- Meta-model brainstorm (A7): not started
+- Lit review (A6): running
+- Meta-model brainstorm (A7): running
+
+- 4B local track (A4): running
+
+## Links
+- Living doc: https://claude.ai/artifact/AHGGWnNe8u9Uj8znQrmC4e
