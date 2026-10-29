@@ -10,3 +10,5 @@ models/
 __pycache__/
 .DS_Store
 .env
+viewer/out/
+viewer/out_public/

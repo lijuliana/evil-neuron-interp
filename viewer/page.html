@@ -1,0 +1,152 @@
+<title>WeirdChat Forks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a reading workbench. Selectors on top, the reply as highlighted text with a strip chart above it,
+   and a sticky inspector on the right that explains the clicked token. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --ink: #172030; --muted: #5a6577; --faint: #8b95a5; --rule: #dde2ea;
+  --accent: #2c56c9; --accent-soft: #e3eafc;
+  --hot: #d8432a; --cool: #138a8a; --ctrl: #8d96a6; --ok: #2f7d4f;
+  --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f131a; --panel: #161c25; --ink: #e5e9f0; --muted: #a0aaba; --faint: #6e7889; --rule: #29313d;
+  --accent: #86a6ff; --accent-soft: #1d2840; --hot: #ff7657; --cool: #3fc2bd; --ctrl: #7b8597; --ok: #6fcf97; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f131a; --panel: #161c25; --ink: #e5e9f0; --muted: #a0aaba; --faint: #6e7889; --rule: #29313d;
+  --accent: #86a6ff; --accent-soft: #1d2840; --hot: #ff7657; --cool: #3fc2bd; --ctrl: #7b8597; --ok: #6fcf97; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); margin: 0 }
+.wrap { max-width: 1400px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 14px }
+h1 { font: 600 28px/1.1 var(--display); margin: 0; letter-spacing: -0.01em }
+.dek { color: var(--muted); margin: 0; max-width: 72ch; text-wrap: pretty }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 }
+.tab { font: 500 13px var(--body); border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline }
+.tab small { color: var(--faint); font: 12px var(--mono) }
+.tab.active { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.tab.active small { color: inherit; opacity: .7 }
+.tab:disabled { cursor: default; opacity: .55; border-style: dashed }
+.tab:focus-visible, button:focus-visible, select:focus-visible, .tok:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.beh { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px }
+.beh h2 { font: 600 17px var(--body); margin: 0 0 2px }
+.beh p { margin: 0; color: var(--muted) }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font: 13px var(--mono); color: var(--muted) }
+.stats b { color: var(--ink); font-weight: 500 }
+.rates { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 3.2em; gap: 3px 8px; align-items: center; font-size: 12.5px }
+.rates .lab { color: var(--muted) }
+.rates .bar { height: 9px; background: var(--rule); border-radius: 2px; overflow: hidden }
+.rates .bar i { display: block; height: 100% }
+.rates .num { font: 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums }
+.rates-cap { font-size: 12px; color: var(--faint); grid-column: 1 / -1; margin-top: 2px }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin-bottom: 12px }
+.controls label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0 }
+select { font: 13px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 6px 8px; max-width: 100%; min-width: 0 }
+#prompt-select { width: min(560px, 90vw) }
+#reply-select { width: min(340px, 90vw) }
+.check { flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 13px !important; color: var(--ink) !important }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; align-items: start }
+@media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr) } .beh { grid-template-columns: minmax(0, 1fr) } }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; min-width: 0 }
+.reading { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow: auto }
+.turn { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere }
+.role { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--faint); display: block }
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted) }
+.pill { font: 500 11.5px var(--mono); padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap }
+.pill.weird { color: var(--hot) } .pill.normal { color: var(--ok) } .pill.na { color: var(--faint) }
+.why { flex-basis: 100%; font-size: 13px; color: var(--muted) }
+.chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 12px; color: var(--muted); margin-bottom: 4px }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px }
+#chart { width: 100%; display: block; cursor: crosshair; touch-action: none }
+#chart text { font: 10.5px var(--mono); fill: var(--faint) }
+.reply { font: 14px/1.85 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0 }
+.tok { cursor: pointer; border-radius: 2px; background: color-mix(in srgb, var(--hl, var(--hot)) calc(var(--v, 0) * 55%), transparent) }
+.tok.bounds { box-shadow: inset -1px 0 0 var(--rule) }
+.tok.cut { text-decoration: underline dotted var(--muted); text-underline-offset: 4px }
+.tok.fork { outline: 1.5px solid var(--hot); outline-offset: 1px }
+.tok.sel { outline: 2px solid var(--accent); outline-offset: 1px; background-color: var(--accent-soft) }
+.tok .ws { color: var(--faint); font-size: 11px }
+.tok.special { color: var(--faint); font-size: 11px; border: 1px dashed var(--rule); padding: 0 3px }
+.note { font-size: 13px; color: var(--muted) }
+.inspector { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow: auto;
+  display: flex; flex-direction: column; gap: 14px }
+@media (max-width: 1000px) { .inspector { position: static; max-height: none } }
+.tokhead { display: flex; justify-content: space-between; gap: 10px; align-items: baseline }
+.tokhead code { font: 500 20px var(--mono); background: var(--accent-soft); padding: 1px 8px; border-radius: 4px; white-space: pre; overflow-x: auto; max-width: 100% }
+.meta { font: 12px var(--mono); color: var(--faint) }
+.sec h3 { font: 600 11.5px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px }
+.big { font: 500 26px var(--mono); font-variant-numeric: tabular-nums }
+.rows { display: grid; grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) 4.2em; gap: 3px 8px; align-items: center; font-size: 12.5px }
+.rows .k { font-family: var(--mono); white-space: pre; overflow: hidden; text-overflow: ellipsis }
+.rows .k.here { color: var(--accent); font-weight: 500 }
+.rows .b { height: 10px; background: var(--rule); border-radius: 2px; position: relative; overflow: hidden }
+.rows .b i { position: absolute; top: 0; bottom: 0; left: 0 }
+.rows .b.div i { left: 50% } .rows .b.div i.neg { left: auto; right: 50% }
+.rows .b.div::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted) }
+.rows .v { font: 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums }
+table.sets { width: 100%; border-collapse: collapse; font-size: 12.5px }
+table.sets th, table.sets td { text-align: right; padding: 3px 4px; font-variant-numeric: tabular-nums }
+table.sets th:first-child, table.sets td:first-child { text-align: left }
+table.sets th { font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--rule) }
+table.sets td { font-family: var(--mono) }
+table.sets tr.ctrl td { color: var(--faint) }
+table.sets tr.here td { color: var(--accent); font-weight: 500 }
+.neuron-lab { font: 11.5px var(--mono); color: var(--muted) }
+.olens { border: 1px dashed var(--rule); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--muted) }
+.linkrow { display: flex; gap: 8px; align-items: center; font-size: 12px }
+.linkrow button { font: 12px var(--body); background: none; border: 1px solid var(--rule); color: var(--ink); border-radius: 6px; padding: 3px 8px; cursor: pointer }
+details.method { margin-top: 18px; font-size: 13.5px; color: var(--muted) }
+details.method summary { cursor: pointer; color: var(--ink); font-weight: 500 }
+details.method p { max-width: 80ch }
+.err { color: var(--hot) }
+@media (prefers-reduced-motion: no-preference) { .tok { transition: background-color .12s } }
+</style>
+<div class="wrap">
+  <header class="top">
+    <h1>WeirdChat Forks</h1>
+    <p class="dek">Qwen3.6-27B replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, and what happens to each token when Agastya Sridharan's mediator neurons are removed.</p>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Behavior"></nav>
+  <section class="beh" id="beh"></section>
+  <div class="controls">
+    <label for="prompt-select">Prompt<select id="prompt-select"></select></label>
+    <label for="reply-select">Reply<select id="reply-select"></select></label>
+    <label for="mode-select">Highlight tokens by<select id="mode-select"></select></label>
+    <label class="check" for="bounds"><input type="checkbox" id="bounds"> Token boundaries</label>
+  </div>
+  <div class="grid">
+    <main class="reading">
+      <section class="card"><span class="role">Conversation</span><div class="chat" id="chat"></div></section>
+      <section class="card">
+        <div class="verdict" id="verdict"></div>
+      </section>
+      <section class="card">
+        <div class="chart-head"><span id="chart-title">Along the reply</span><span class="legend" id="chart-legend"></span></div>
+        <svg id="chart" role="img" aria-label="Chance of turning weird and neuron-set effect along the reply"></svg>
+      </section>
+      <section class="card">
+        <div class="chart-head"><span>Reply · click any token</span><span class="legend" id="tok-legend"></span></div>
+        <div class="reply" id="reply"></div>
+      </section>
+    </main>
+    <aside class="card inspector" id="inspector" aria-live="polite"></aside>
+  </div>
+  <details class="method">
+    <summary>How to read this</summary>
+    <p><b>Chance of turning weird.</b> Agastya cut each weird reply at about ten places. At each cut he regenerated the rest of the reply 8 to 16 times from the same prefix and had Gemma 4 31B judge every continuation. Dotted underlines mark the measured cuts; between cuts the viewer carries the last measured value forward. The fork is the token after which the chance jumps the most, found by bisection.</p>
+    <p><b>Removing neurons.</b> We ran each reply once normally and once with a neuron set zeroed at the MLP output (down_proj input), feeding the same tokens. The set's support for a token is how much less likely the token becomes without the set, in nats. Each set has a random control: neurons drawn from the same layers with matched activation size. Own sets are each behavior's top 100 neurons by attribution at its forks; the shared set is 100 neurons from layers 24 to 47 that lower all eight behaviors.</p>
+    <p><b>In-sample caution.</b> Every forked reply here comes from Agastya's discovery prompts, and the own sets were selected by attribution at these same forks. Strong support at a fork token is therefore expected by construction. Out-of-sample evidence is his held-out rate results (the bars at the top). What this view adds is where else in a reply the set matters, and how normal replies to the same prompt compare.</p>
+    <p><b>Neuron activations</b> are read at the position that produced the token, so they are the state the model was in when it chose it. Oracle-lens readouts will be added at each token once that run is validated.</p>
+    <p id="source-line"></p>
+  </details>
+</div>
+<script src="app.js"></script>
