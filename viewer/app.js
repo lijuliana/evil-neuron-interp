@@ -199,7 +199,7 @@ function applyMode(mode) {
     s.style.setProperty('--v', mv ? mv.v.toFixed(3) : 0);
     s.style.setProperty('--hl', mv ? `var(${mv.hl})` : 'transparent');
   });
-  $('tok-legend').innerHTML = legendFor(mode);
+  $('tok-legend').innerHTML = legendFor(mode) + (rep.curve ? '<span class="cutkey">dotted underline: chance of weird measured after this token</span>' : '');
   renderChart();
 }
 

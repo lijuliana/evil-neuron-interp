@@ -112,7 +112,8 @@ select:hover { border-color: var(--faint) }
 .reply.chips .tok { white-space: pre; border: 1px solid var(--rule-2); border-radius: 4px; padding: 4px 5px;
   background-color: color-mix(in srgb, var(--hl, transparent) calc(var(--v, 0) * 100%), var(--chip)) }
 .reply.chips .tok:hover { border-color: var(--faint); box-shadow: none }
-.reply.chips .tok.cut { border-bottom: 2px dotted var(--muted) }
+.reply.chips .tok.cut { border-bottom: 2px dotted var(--muted); text-decoration: none }
+.cutkey { text-decoration: underline dotted var(--muted); text-underline-offset: 4px }
 .reply.chips .tok.fork { border-color: var(--hot); box-shadow: inset 0 0 0 1px var(--hot); outline: none }
 .reply.chips .tok.sel { outline: 2px solid var(--accent); outline-offset: 1px }
 .reply.chips .tok.special { font: 12.5px/1.2 var(--mono); color: var(--faint); border-style: dashed; margin: 0; border-radius: 4px; padding: 4px 5px }
