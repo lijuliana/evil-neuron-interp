@@ -8,7 +8,7 @@
    sans for controls and labels, mono only for raw token strings. Anthropic's own faces are used when installed. */
 :root {
   --paper: #f4f4f1; --sheet: #ffffff; --ink: #1d1c19; --muted: #625f58; --faint: #8f8b82;
-  --rule: #e7e5df; --rule-2: #d5d2ca; --bar: #ebe9e3; --tint: #f8f8f6; --chip: #fbfaf7;
+  --rule: #e7e5df; --rule-2: #d5d2ca; --bar: #ebe9e3; --tint: #f8f8f6; --chip: #fbfaf7; --shadow: rgba(30, 26, 18, 0.14);
   --accent: #3352b0; --accent-soft: #e4e9f8;
   --hot: #c9472b; --cool: #157f79; --ctrl: #a8a49b; --ok: #3b7a4d;
   --serif: "Anthropic Serif", "Tiempos Text", "Source Serif 4", Georgia, "Times New Roman", serif;
@@ -17,18 +17,18 @@
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --paper: #141412; --sheet: #1c1b19; --ink: #ebeae5; --muted: #aaa69d; --faint: #7d7970;
-  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e;
+  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e; --shadow: rgba(0, 0, 0, 0.55);
   --accent: #93a9f4; --accent-soft: #262e48; --hot: #ee7c5e; --cool: #4dbfb5; --ctrl: #6f6b63; --ok: #7ec495; color-scheme: dark } }
 :root[data-theme="dark"] {
   --paper: #141412; --sheet: #1c1b19; --ink: #ebeae5; --muted: #aaa69d; --faint: #7d7970;
-  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e;
+  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e; --shadow: rgba(0, 0, 0, 0.55);
   --accent: #93a9f4; --accent-soft: #262e48; --hot: #ee7c5e; --cool: #4dbfb5; --ctrl: #6f6b63; --ok: #7ec495; color-scheme: dark }
 * { box-sizing: border-box }
 [hidden] { display: none !important }
 body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans); margin: 0; -webkit-font-smoothing: antialiased }
 button, select, input { font: inherit }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-.wrap { max-width: 1380px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 36px); padding-block: 32px 64px;
+.wrap { max-width: 1380px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 36px); padding-block: 64px 64px;
   display: flex; flex-direction: column; gap: 24px }
 
 /* masthead */
@@ -50,9 +50,16 @@ h1 { font: 500 clamp(30px, 3.6vw, 40px)/1.08 var(--serif); letter-spacing: -0.01
 .beh { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 10px 32px }
 .beh h2 { font: 500 26px/1.2 var(--serif); margin: 0 0 4px; text-wrap: balance }
 .beh .desc { font: 17px/1.5 var(--serif); color: var(--muted); margin: 0 }
-.stats { display: grid; grid-template-columns: repeat(2, auto); gap: 6px 24px; padding-bottom: 3px }
-.stat { display: flex; align-items: baseline; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; cursor: help }
-.stat b { font: 500 22px/1 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right }
+.info { position: relative; display: inline-grid; place-items: center; width: 19px; height: 19px; margin-left: 10px; vertical-align: 4px;
+  border: 1px solid var(--rule-2); border-radius: 50%; font: 600 11px/1 var(--sans); color: var(--muted); cursor: help }
+.info:hover, .info:focus { color: var(--ink); border-color: var(--faint); outline: none }
+.info:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.pop { display: none; position: absolute; left: -8px; top: calc(100% + 10px); z-index: 20; width: max-content; max-width: min(360px, 80vw);
+  background: var(--sheet); border: 1px solid var(--rule-2); border-radius: 10px; padding: 14px 16px; box-shadow: 0 10px 28px var(--shadow);
+  grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; text-align: left; font: 400 12.5px/1.4 var(--sans); color: var(--muted) }
+.info:hover .pop, .info:focus .pop { display: grid }
+.pop b { font: 500 22px/1 var(--serif); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums }
+.pop strong { font-weight: 600; color: var(--ink) }
 .rates-card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 18px 20px }
 .mini { font: 600 11.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px }
 .rates { display: grid; grid-template-columns: 9em minmax(0, 1fr) 3em; gap: 4px 10px; align-items: center; font-size: 13px }
@@ -105,7 +112,8 @@ select:hover { border-color: var(--faint) }
 .block-head h3 { font: 600 11.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); align-items: center }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px }
-#chart { width: 100%; display: block; cursor: crosshair; touch-action: none; overflow: visible }
+#chart { width: 100%; display: block; cursor: crosshair; touch-action: pan-y; overflow: visible; user-select: none }
+.chart-hint { font-size: 12px; color: var(--faint); margin: 8px 0 0; min-height: 1em }
 #chart text { font: 11px var(--sans); fill: var(--faint) }
 #chart .lane { font-weight: 600; fill: var(--muted) }
 #chart .forklab { fill: var(--hot); font-weight: 600 }
@@ -239,6 +247,7 @@ table.t tr.ctrl td { color: var(--faint) }
       <section class="block">
         <div class="block-head"><h3>Along the reply</h3><div class="legend" id="chart-legend"></div></div>
         <svg id="chart" role="img" aria-label="Chance of turning weird and neuron-set support along the reply"></svg>
+        <p class="chart-hint" id="chart-hint"></p>
       </section>
       <section class="block">
         <div class="block-head"><h3>Reply · click any token</h3>
@@ -255,9 +264,9 @@ table.t tr.ctrl td { color: var(--faint) }
   </div>
   <section class="method">
     <h2>How to read this</h2>
-    <div><h3>Chance of turning weird</h3><p>Agastya cut each weird reply at about ten places. At each cut he regenerated the rest of the reply 8 to 16 times from the same prefix and had Gemma 4 31B judge every continuation. Dotted underlines mark the measured cuts; between cuts the last measured value carries forward. The fork is the token where the chance jumps the most, found by bisection.</p></div>
+    <div><h3>Chance of turning weird</h3><p>Each weird reply was cut at about ten places. At each cut the rest of the reply was regenerated 8 to 16 times from the same prefix, and Gemma 4 31B judged every continuation. Dotted underlines mark the measured cuts; between cuts the last measured value carries forward. The fork is the token where the chance jumps the most, found by bisection.</p></div>
     <div><h3>Removing neurons</h3><p>Each reply was run once normally and once with a neuron set zeroed at the MLP output, feeding the same tokens. A set's support for a token is how much less likely the token becomes without the set, in nats; 2.3 nats is a tenfold drop. Own sets are each behavior's top 100 neurons by attribution at its forks. The shared set is 100 neurons from layers 24 to 47 that lower all eight behaviors. Each set has a random control drawn from the same layers with matched activation size.</p></div>
-    <div><h3>In-sample caution</h3><p>Every forked reply here comes from Agastya's discovery prompts, and the own sets were picked by attribution at these same forks, so strong support at a fork token is expected by construction. The rate bars pool both splits. The out-of-sample test is Agastya's held-out split, phrasings the sets never saw: removing the top 100 still takes fake code execution and 911 to 0% and laser and claiming a body to about 6%, while denying being an AI does not drop at all. This view adds where else in a reply a set matters, and how normal replies to the same prompt compare.</p></div>
+    <div><h3>In-sample caution</h3><p>Every forked reply here comes from the discovery prompts, and the own sets were picked by attribution at these same forks, so strong support at a fork token is expected by construction. The rate bars pool both splits. The out-of-sample test is the held-out split, phrasings the sets never saw: removing the top 100 still takes fake code execution and 911 to 0% and laser and claiming a body to about 6%, while denying being an AI does not drop at all. This view adds where else in a reply a set matters, and how normal replies to the same prompt compare.</p></div>
     <div><h3>Neuron activations</h3><p>Activations are read at the position that produced the token, so they show the state the model was in when it chose it. Oracle-lens readouts will be added at each token once that run is validated.</p></div>
     <p class="source" id="source-line"></p>
   </section>

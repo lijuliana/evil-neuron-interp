@@ -91,11 +91,14 @@ function renderBehavior(b) {
       <div class="rates">${ablated.map(row).join('')}${controls.length ? `<span class="split">random controls</span>${controls.map(row).join('')}` : ''}
       <span></span><span class="axis">${ticks}</span><span></span></div>`;
   } else {
-    right = `<h3 class="mini">Neuron set</h3><p class="cap" style="margin:0">Agastya built no per-behavior set for this behavior. The viewer uses his shared mid-layer set (layers 24 to 47), which lowers all eight behaviors he tested.</p>`;
+    right = `<h3 class="mini">Neuron set</h3><p class="cap" style="margin:0">No per-behavior set was built for this behavior. The viewer uses the shared mid-layer set (layers 24 to 47), which lowers all eight behaviors tested.</p>`;
   }
-  const stat = (v, lab, tip) => `<span class="stat" title="${esc(tip)}"><b>${v}</b>${lab}</span>`;
-  $('beh').innerHTML = `<div><h2>${esc(b.title)}</h2><p class="desc">${esc(b.desc)}</p></div>
-    <div class="stats">${stat(b.prompts, 'prompts', 'Prompts where at least one weird reply was traced to a fork')}${stat(b.forks, 'weird replies traced', 'Weird replies cut and resampled to find the token where they turn')}${stat(b.sharp, 'flipped by one token', 'Replies where a single token raises the chance of weird by 50 points or more')}${stat(b.p2, 'used to find neurons', 'Forks that held up under the stricter thinking-on judge; Agastya ran neuron attribution at these 46 forks (Phase 2)')}</div>`;
+  const stat = (v, lab, tip) => `<b>${v}</b><span><strong>${lab}</strong><br>${tip}</span>`;
+  const pop = stat(b.prompts, 'prompts', 'with at least one weird reply traced to a fork') +
+    stat(b.forks, 'weird replies traced', 'cut and resampled to find the token where they turn') +
+    stat(b.sharp, 'flipped by one token', 'one token raises the chance of weird by 50 points or more') +
+    stat(b.p2, 'used to find neurons', 'held up under the stricter thinking-on judge; the neuron search ran at these (Phase 2)');
+  $('beh').innerHTML = `<div><h2>${esc(b.title)}<span class="info" tabindex="0" role="button" aria-label="Counts for this behavior">i<span class="pop" role="tooltip">${pop}</span></span></h2><p class="desc">${esc(b.desc)}</p></div>`;
   $('rates').innerHTML = right;
 }
 function maxJump(p) { return Math.max(-1, ...p.replies.filter(r => r.kind === 'fork').map(r => r.jump ?? 0)); }
@@ -149,6 +152,7 @@ async function selectPrompt(file, i = null, j = null) {
 }
 function selectReply(i, j = null) {
   const rep = state.rep = state.doc.replies.find(r => r.i === i);
+  state.win0 = null;
   $('reply-select').value = String(i);
   const pill = (lab, v) => `<span class="pill ${v == null ? 'na' : v.match ? 'weird' : 'normal'}">${lab}: ${v == null ? 'not judged' : v.match ? 'weird' : 'normal'}</span>`;
   const end = rep.finish === 'length' ? 'cut off at 1,024 tokens' : 'ended normally';
@@ -203,7 +207,7 @@ function applyMode(mode) {
     s.style.setProperty('--v', mv ? mv.v.toFixed(3) : 0);
     s.style.setProperty('--hl', mv ? `var(${mv.hl})` : 'transparent');
   });
-  $('tok-legend').innerHTML = legendFor(mode) + (rep.curve ? '<span class="cutkey">dotted underline: chance of weird measured after this token</span>' : '');
+  $('tok-legend').innerHTML = legendFor(mode) + '<span>· marks a space, ↵ a newline</span>' + (rep.curve ? '<span class="cutkey">dotted underline: chance of weird measured after this token</span>' : '');
   renderChart();
 }
 
@@ -213,69 +217,127 @@ function chartSet(rep) {
   if (m?.set && rep.sets?.[m.set]) return m.set.replace('_rand', '');
   return mainSet(rep);
 }
-function niceStep(R) { return [10, 20, 50, 100, 200, 250, 500].find(s => R / s <= 6) || 1000; }
+// The chart shows a window of tokens around the selection; the strip under it shows the whole reply and the window.
+function ensureWindow(j) {
+  const R = state.rep.t.length, size = Math.min(R, state.winSize || 60), m = Math.min(4, Math.floor(size / 6));
+  let w = state.win0;
+  if (w == null || j < w || j >= w + size) w = j - Math.floor(size * 0.35);
+  else if (j < w + m) w = j - m;
+  else if (j >= w + size - m) w = j - size + m + 1;
+  state.win0 = Math.max(0, Math.min(R - size, w));
+}
 function renderChart() {
-  const rep = state.rep, svg = $('chart');
+  const rep = state.rep, svg = $('chart'), R = rep.t.length;
   const W = Math.max(300, Math.round(svg.clientWidth || svg.parentNode.clientWidth - 48));
-  const R = rep.t.length, L = 44, Rm = 12, x = c => L + (W - L - Rm) * c / R;
+  const L = 44, Rm = 12, PW = W - L - Rm;
+  const size = state.winSize = Math.min(R, Math.max(30, Math.min(150, Math.floor(PW / 11))));
+  const j = Math.min(state.j, R - 1);
+  if (state.win0 == null || state.win0 > R - size) ensureWindow(j);
+  const w0 = state.win0 = Math.max(0, Math.min(R - size, state.win0)), slot = PW / size, windowed = size < R;
+  const x = c => L + slot * (c - w0);
   const set = chartSet(rep);
   const top = 26, h1 = 64, y1 = P => top + (1 - P) * h1;
   const amp = 30, clip = 8, mid = top + h1 + 34 + amp;
-  const axisY = (set ? mid + amp : top + h1) + 12, H = axisY + 16;
-  state.geom = { L, Rm, W, R };
+  const axisY = (set ? mid + amp : top + h1) + 10, mmTop = axisY + 24, mmH = 18;
+  const H = windowed ? mmTop + mmH + 4 : axisY + 22;
+  state.geom = { L, PW, slot, w0, size, axisY, mmTop, mmH, windowed, R };
   const hot = css('--hot'), cool = css('--cool'), ctrl = css('--ctrl'), rule = css('--rule-2'), acc = css('--accent'), faint = css('--faint');
-  let g = `<text class="lane" x="${L}" y="${top - 12}">Chance of turning weird</text>`;
+  const sheet = css('--sheet');
+  let g = `<defs><clipPath id="pclip"><rect x="${L}" y="0" width="${PW}" height="${axisY}"/></clipPath></defs>`;
+  // selected column, behind everything
+  if (j >= w0 && j < w0 + size) g += `<rect x="${x(j)}" y="${top - 8}" width="${slot}" height="${axisY - top + 6}" rx="2" fill="${acc}" fill-opacity="0.13"/>`;
+  g += `<text class="lane" x="${L}" y="${top - 12}">Chance of turning weird</text>`;
   for (const P of [0, 0.5, 1]) g += `<line x1="${L}" x2="${W - Rm}" y1="${y1(P)}" y2="${y1(P)}" stroke="${rule}" stroke-width="1" stroke-dasharray="${P === 0.5 ? '2 4' : ''}"/><text x="${L - 8}" y="${y1(P) + 4}" text-anchor="end">${Math.round(P * 100)}%</text>`;
+  let body = '';
   if (rep.curve) {
     let d = '';
     rep.curve.forEach(([c, P], k) => { d += k ? `H${x(c)}V${y1(P)}` : `M${x(c)},${y1(P)}`; });
     d += `H${x(R)}`;
-    g += `<path d="${d}" fill="none" stroke="${hot}" stroke-width="2" stroke-linejoin="round"/>`;
-    for (const [c, P, n] of rep.curve) g += `<circle cx="${x(c)}" cy="${y1(P)}" r="3.2" fill="${hot}" stroke="${css('--sheet')}" stroke-width="1.5"><title>after ${c} tokens: ${pct(P)} weird (${n ?? '?'} judged continuations)</title></circle>`;
-    if (rep.fork) {
-      const fx = x(rep.fork.c0 + 0.5), right = fx < W - 60;
-      g += `<line x1="${fx}" x2="${fx}" y1="${top - 4}" y2="${axisY - 6}" stroke="${hot}" stroke-dasharray="3 3" stroke-width="1"/>`;
-      g += `<text class="forklab" x="${right ? fx + 6 : fx - 6}" y="${top + h1 - 6}" text-anchor="${right ? 'start' : 'end'}">fork</text>`;
+    body += `<path d="${d}" fill="none" stroke="${hot}" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const [c, P, n] of rep.curve) if (c >= w0 && c <= w0 + size) body += `<circle cx="${x(c)}" cy="${y1(P)}" r="3.5" fill="${hot}" stroke="${sheet}" stroke-width="1.5"><title>after ${c} tokens: ${pct(P)} weird (${n ?? '?'} judged continuations)</title></circle>`;
+    const fc = rep.fork?.c0;
+    if (fc != null && fc >= w0 && fc < w0 + size) {
+      const fx = x(fc + 0.5), right = fx < W - 60;
+      body += `<line x1="${fx}" x2="${fx}" y1="${top - 4}" y2="${axisY - 4}" stroke="${hot}" stroke-dasharray="3 3" stroke-width="1"/>`;
+      body += `<text class="forklab" x="${right ? fx + 6 : fx - 6}" y="${top + h1 - 6}" text-anchor="${right ? 'start' : 'end'}">fork</text>`;
     }
   } else {
     const P = state.doc.rate ?? 0;
-    g += `<line x1="${L}" x2="${W - Rm}" y1="${y1(P)}" y2="${y1(P)}" stroke="${faint}" stroke-dasharray="4 3"/><text x="${L + 6}" y="${y1(P) - 6}">prompt rate ${pct(P)}; normal replies were not resampled</text>`;
+    body += `<line x1="${L}" x2="${W - Rm}" y1="${y1(P)}" y2="${y1(P)}" stroke="${faint}" stroke-dasharray="4 3"/><text x="${L + 6}" y="${y1(P) - 6}">prompt rate ${pct(P)}; normal replies were not resampled</text>`;
   }
   if (set) {
-    g += `<text class="lane" x="${L}" y="${mid - amp - 12}">${SETS[set]}: support for each token</text>`;
+    g += `<text class="lane" x="${L}" y="${mid - amp - 12}">${SETS[set]}: support for each token (nats)</text>`;
     g += `<line x1="${L}" x2="${W - Rm}" y1="${mid}" y2="${mid}" stroke="${rule}"/>`;
-    for (const s of [1, -1]) g += `<line x1="${L}" x2="${W - Rm}" y1="${mid - s * amp}" y2="${mid - s * amp}" stroke="${rule}" stroke-dasharray="2 4"/><text x="${L - 8}" y="${mid - s * amp + 4}" text-anchor="end">${s > 0 ? '+' : '−'}${clip}</text>`;
+    for (const sg of [1, -1]) g += `<line x1="${L}" x2="${W - Rm}" y1="${mid - sg * amp}" y2="${mid - sg * amp}" stroke="${rule}" stroke-dasharray="2 4"/><text x="${L - 8}" y="${mid - sg * amp + 4}" text-anchor="end">${sg > 0 ? '+' : '−'}${clip}</text>`;
     g += `<text x="${L - 8}" y="${mid + 4}" text-anchor="end">0</text>`;
-    const bw = Math.max(1, Math.min(4, (W - L - Rm) / R * 0.75));
-    const bars = (arr, up, dn) => {
-      let a = '', b = '';
-      arr.forEach((dl, j) => {
-        const s = Math.max(-clip, Math.min(clip, -dl)), h = amp * Math.abs(s) / clip;
-        if (h < 0.4) return;
-        const seg = `M${x(j + 0.5).toFixed(1)},${mid}v${(s > 0 ? -h : h).toFixed(1)}`;
-        if (s > 0) a += seg; else b += seg;
-      });
-      return `<path d="${a}" stroke="${up}" stroke-width="${bw}" fill="none"/><path d="${b}" stroke="${dn}" stroke-width="${bw}" fill="none"/>`;
+    const own = rep.sets[set].dlp, rnd = rep.sets[set + '_rand']?.dlp;
+    const bar = (k, dl, bx, bw, up, dn) => {
+      const v = Math.max(-clip, Math.min(clip, -dl)), h = amp * Math.abs(v) / clip;
+      return h < 0.5 ? '' : `<rect x="${bx.toFixed(1)}" y="${(v > 0 ? mid - h : mid).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${v > 0 ? up : dn}"/>`;
     };
-    if (rep.sets[set + '_rand']) g += bars(rep.sets[set + '_rand'].dlp, ctrl, ctrl);
-    g += bars(rep.sets[set].dlp, hot, cool);
-    $('chart-legend').innerHTML = sw('--hot', 'chance of weird / supports') + sw('--cool', 'suppresses') + sw('--ctrl', 'random control') + '<span>support in nats</span>';
+    for (let k = w0; k < w0 + size; k++) {
+      const sx = x(k);
+      body += bar(k, own[k], sx + slot * 0.12, slot * (rnd ? 0.5 : 0.76), hot, cool);
+      if (rnd) body += bar(k, rnd[k], sx + slot * 0.64, slot * 0.24, ctrl, ctrl);
+    }
+    $('chart-legend').innerHTML = sw('--hot', 'weird / supports') + sw('--cool', 'suppresses') + sw('--ctrl', 'random control');
   } else {
     $('chart-legend').innerHTML = sw('--hot', 'chance of weird');
   }
-  const step = niceStep(R);
-  for (let c = 0; c <= R - step / 3; c += step) g += `<text x="${x(c)}" y="${axisY + 10}" text-anchor="${c === 0 ? 'start' : 'middle'}">${c}</text>`;
-  g += `<text x="${W - Rm}" y="${axisY + 10}" text-anchor="end">${R} tokens</text>`;
-  g += `<line id="cursor" x1="${x(state.j + 0.5)}" x2="${x(state.j + 0.5)}" y1="${top - 6}" y2="${axisY - 2}" stroke="${acc}" stroke-width="2"/>`;
+  g += `<g clip-path="url(#pclip)">${body}</g>`;
+  // token ticks along the window, numbered from 1 like the inspector
+  const step = [1, 2, 5, 10, 20, 50, 100].find(s => size / s <= 12);
+  for (let k = w0; k < w0 + size; k++) if ((k + 1) % step === 0 || k === w0) {
+    const tx = x(k + 0.5);
+    g += `<line x1="${tx}" x2="${tx}" y1="${axisY - 2}" y2="${axisY + 2}" stroke="${rule}"/><text x="${tx}" y="${axisY + 13}" text-anchor="middle">${k + 1}</text>`;
+  }
+  // hover titles per token
+  for (let k = w0; k < w0 + size; k++) {
+    const sup = set ? ` · support ${(-rep.sets[set].dlp[k]).toFixed(2)}` : '';
+    g += `<rect x="${x(k)}" y="${top - 8}" width="${slot}" height="${axisY - top + 8}" fill="${sheet}" fill-opacity="0"><title>token ${k + 1}: ${esc(vis(rep.t[k]))}${sup}</title></rect>`;
+  }
+  if (windowed) {
+    const mx = c => L + PW * c / R;
+    let a = `M${L},${mmTop + mmH}`;
+    if (rep.curve) { rep.curve.forEach(([c, P], k) => { a += k ? `H${mx(c)}V${mmTop + mmH - P * mmH}` : `V${mmTop + mmH - P * mmH}H${mx(c)}`; }); a += `H${mx(R)}V${mmTop + mmH}Z`; }
+    g += `<rect x="${L}" y="${mmTop}" width="${PW}" height="${mmH}" rx="3" fill="${css('--bar')}"/>`;
+    if (rep.curve) g += `<path d="${a}" fill="${hot}" fill-opacity="0.2"/>`;
+    if (rep.fork) g += `<line x1="${mx(rep.fork.c0 + 0.5)}" x2="${mx(rep.fork.c0 + 0.5)}" y1="${mmTop}" y2="${mmTop + mmH}" stroke="${hot}" stroke-width="1.5"/>`;
+    g += `<line x1="${mx(j + 0.5)}" x2="${mx(j + 0.5)}" y1="${mmTop - 2}" y2="${mmTop + mmH + 2}" stroke="${acc}" stroke-width="2"/>`;
+    g += `<rect class="mmwin" x="${mx(w0)}" y="${mmTop - 1}" width="${Math.max(6, PW * size / R)}" height="${mmH + 2}" rx="3" fill="${acc}" fill-opacity="0.12" stroke="${acc}" stroke-width="1.5"/>`;
+    g += `<text x="${L - 8}" y="${mmTop + mmH / 2 + 4}" text-anchor="end">all</text>`;
+  }
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('height', H);
   svg.innerHTML = g;
-  const pick = e => {
-    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
-    selectToken(Math.max(0, Math.min(R - 1, Math.floor((px - L) / (W - L - Rm) * R))), true);
+  $('chart-hint').textContent = windowed ? `Tokens ${w0 + 1}–${w0 + size} of ${R}. Drag the bottom strip or swipe sideways to move; arrow keys step through tokens.` : '';
+}
+function bindChart() {
+  const svg = $('chart');
+  let mode = null;
+  const at = e => { const r = svg.getBoundingClientRect(), G = state.geom; return { G, px: (e.clientX - r.left) * (svg.viewBox.baseVal.width / r.width), py: (e.clientY - r.top) * (svg.viewBox.baseVal.height / r.height) }; };
+  const move = e => {
+    const { G, px } = at(e);
+    if (mode === 'mm') { state.win0 = Math.round(G.R * (px - G.L) / G.PW - G.size / 2); renderChart(); }
+    else if (mode === 'pick') selectToken(Math.max(0, Math.min(G.R - 1, G.w0 + Math.floor((px - G.L) / G.slot))), true);
   };
-  svg.onpointerdown = e => { pick(e); svg.setPointerCapture(e.pointerId); svg.onpointermove = pick; };
-  svg.onpointerup = () => { svg.onpointermove = null; };
+  svg.onpointerdown = e => {
+    if (!state.geom) return;
+    const { G, py } = at(e);
+    mode = G.windowed && py >= G.mmTop - 6 ? 'mm' : 'pick';
+    svg.setPointerCapture(e.pointerId); move(e);
+  };
+  svg.onpointermove = e => { if (mode) move(e); };
+  svg.onpointerup = svg.onpointercancel = () => { mode = null; };
+  let acc = 0;
+  svg.addEventListener('wheel', e => {
+    const G = state.geom;
+    if (!G?.windowed || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    acc += e.deltaX / G.slot;
+    const n = Math.trunc(acc);
+    if (n) { acc -= n; state.win0 = G.w0 + n; renderChart(); }
+  }, { passive: false });
 }
 
 // ------------------------------------------------------------------ inspector
@@ -294,8 +356,7 @@ function selectToken(j, scroll = false) {
   document.querySelectorAll('#reply .tok.sel').forEach(s => s.classList.remove('sel'));
   const span = document.querySelector(`#reply .tok[data-j="${j}"]`);
   if (span) { span.classList.add('sel'); if (scroll) scrollToToken(span); }
-  const cur = document.getElementById('cursor'), G = state.geom;
-  if (cur && G) { const xx = G.L + (G.W - G.L - G.Rm) * (j + 0.5) / G.R; cur.setAttribute('x1', xx); cur.setAttribute('x2', xx); }
+  ensureWindow(j); renderChart();
   history.replaceState(null, '', `#${state.file}.${rep.i}.${j}`);
 
   const F = rep.fork, atFork = F && F.c0 === j, p = pwAt(rep, j), ms = mainSet(rep);
@@ -324,7 +385,7 @@ function selectToken(j, scroll = false) {
   }
   if (rep.top) {
     const [ids, ps] = rep.top[j];
-    const rows = ids.map((id, k) => [vis(state.doc.vocab[id] ?? `#${id}`), ps[k], prob(ps[k]), id === rep.ids[j]]);
+    const rows = ids.map((id, k) => [vis(state.doc.vocab[id] ?? `#${id}`), ps[k], ps[k] === 0 ? '<0.1%' : prob(ps[k]), id === rep.ids[j]]);
     out.push(`<section class="sec"><h4>Model's top 5 here</h4>${rowsHTML(rows, Math.max(...ps))}</section>`);
   }
   if (rep.sets) {
@@ -342,9 +403,9 @@ function selectToken(j, scroll = false) {
       return `<span class="k" title="${esc((nfo.plus || []).join(' '))}">L${L} N${n}</span><span class="b div"><i class="${v < 0 ? 'neg' : ''}" style="width:${50 * Math.abs(v) / m}%;background:var(${v < 0 ? '--cool' : '--hot'})"></i></span><span class="v">${v.toFixed(2)}</span>${lab ? `<span class="lab">${esc(lab)}</span>` : ''}`;
     }).join('');
     out.push(`<section class="sec"><h4>Own top-10 neurons at this step</h4><div class="rows">${rows}</div>
-      <p class="note">Each bar is scaled to that neuron's largest activation in this reply. Labels are Agastya's readings of the neuron's output direction.</p></section>`);
+      <p class="note">Each bar is scaled to that neuron's largest activation in this reply. Labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative.</p></section>`);
   }
-  out.push(`<section class="sec foot"><b>Oracle-lens readout:</b> not computed yet. It will appear here once the lens rebuild is checked against Agastya's saved readouts.</section>`);
+  out.push(`<section class="sec foot"><b>Oracle-lens readout:</b> not computed yet. It will appear here once the lens rebuild is checked against the saved readouts.</section>`);
   $('inspector').innerHTML = out.join('');
   $('copy-link').onclick = async () => {
     try { await navigator.clipboard.writeText(location.href); $('copy-status').textContent = 'Copied'; }
@@ -366,6 +427,7 @@ function openHash() {
 async function init() {
   state.index = await getJSON('index.json');
   $('mode-select').onchange = () => applyMode($('mode-select').value);
+  bindChart();
   for (const b of document.querySelectorAll('.seg button')) b.onclick = () => {
     state.view = b.dataset.view;
     try { localStorage.setItem('wcf-view', state.view); } catch {}
