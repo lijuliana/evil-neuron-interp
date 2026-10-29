@@ -93,10 +93,10 @@ function renderBehavior(b) {
   } else {
     right = `<h3 class="mini">Neuron set</h3><p class="cap" style="margin:0">Agastya built no per-behavior set for this behavior. The viewer uses his shared mid-layer set (layers 24 to 47), which lowers all eight behaviors he tested.</p>`;
   }
-  const stat = (v, lab) => `<div class="stat"><b>${v}</b><span>${lab}</span></div>`;
-  $('beh').innerHTML = `<div><h2>${esc(b.title)}</h2><p class="desc">${esc(b.desc)}</p>
-    <div class="stats">${stat(b.prompts, 'prompts with a fork')}${stat(b.forks, 'forked replies')}${stat(b.sharp, 'sharp forks, jump ≥ 0.5')}${stat(b.p2, 'in Phase 2')}</div></div>
-    <div>${right}</div>`;
+  const stat = (v, lab, tip) => `<span class="stat" title="${esc(tip)}"><b>${v}</b>${lab}</span>`;
+  $('beh').innerHTML = `<div><h2>${esc(b.title)}</h2><p class="desc">${esc(b.desc)}</p></div>
+    <div class="stats">${stat(b.prompts, 'prompts', 'Prompts where at least one weird reply was traced to a fork')}${stat(b.forks, 'weird replies traced', 'Weird replies cut and resampled to find the token where they turn')}${stat(b.sharp, 'flipped by one token', 'Replies where a single token raises the chance of weird by 50 points or more')}${stat(b.p2, 'used to find neurons', 'Forks that held up under the stricter thinking-on judge; Agastya ran neuron attribution at these 46 forks (Phase 2)')}</div>`;
+  $('rates').innerHTML = right;
 }
 function maxJump(p) { return Math.max(-1, ...p.replies.filter(r => r.kind === 'fork').map(r => r.jump ?? 0)); }
 
@@ -105,10 +105,10 @@ async function selectBehavior(bid, file = null, i = null, j = null) {
   const b = state.index.behaviors.find(x => x.id === bid);
   renderTabs(); renderBehavior(b);
   const gated = b.cw && !state.revealed.has(bid);
-  $('gate').hidden = !gated; $('bench').hidden = gated;
+  $('gate').hidden = !gated; $('sheet').hidden = gated; $('inspector').hidden = gated;
   if (gated) {
     $('gate-title').textContent = `${b.title}: these replies contain ${b.cw}.`;
-    $('gate-text').textContent = `They are shown as research data on a model behavior that safety training should prevent. If this topic is hard for you, you can skip it; the counts and rates above are the summary.`;
+    $('gate-text').textContent = `They are shown as research data on a model behavior that safety training should prevent. If this topic is hard for you, you can skip it; the counts and rates are the summary.`;
     $('gate-btn').onclick = () => { state.revealed.add(bid); selectBehavior(bid, file, i, j).catch(showError); };
     history.replaceState(null, '', location.pathname + location.search);
     return;
