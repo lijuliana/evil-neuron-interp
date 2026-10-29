@@ -194,9 +194,15 @@ table.t tr.ctrl td { color: var(--faint) }
 .foot b { color: var(--muted); font-weight: 600 }
 
 /* method */
-.method { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px 40px;
-  border-top: 1px solid var(--rule-2); padding-top: 24px; margin-top: 12px }
-.method h2 { grid-column: 1 / -1; font: 500 24px/1.2 var(--serif); margin: 0 }
+.method { border-top: 1px solid var(--rule-2); padding-top: 20px; margin-top: 12px }
+.method summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; border-radius: 6px }
+.method summary::-webkit-details-marker { display: none }
+.method summary::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg); margin-top: -1px }
+.method[open] summary::before { transform: rotate(45deg); margin-top: -5px }
+.method summary h2 { font: 500 22px/1.2 var(--serif); margin: 0 }
+.method summary:hover h2 { color: var(--accent) }
+.method-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px 40px; margin-top: 20px }
 .method h3 { font: 600 13.5px var(--sans); margin: 0 0 6px }
 .method p { font: 15.5px/1.6 var(--serif); color: var(--muted); margin: 0; max-width: 62ch; text-wrap: pretty }
 .method .source { grid-column: 1 / -1; font: 12.5px/1.5 var(--sans); color: var(--faint); max-width: none }
@@ -262,13 +268,15 @@ table.t tr.ctrl td { color: var(--faint) }
     <aside class="inspector" id="inspector" aria-live="polite"></aside>
    </div>
   </div>
-  <section class="method">
-    <h2>How to read this</h2>
+  <details class="method" id="method">
+    <summary><h2>How to read this</h2></summary>
+    <div class="method-body">
     <div><h3>Chance of turning weird</h3><p>Each weird reply was cut at about ten places. At each cut the rest of the reply was regenerated 8 to 16 times from the same prefix, and Gemma 4 31B judged every continuation. Dotted underlines mark the measured cuts; between cuts the last measured value carries forward. The fork is the token where the chance jumps the most, found by bisection.</p></div>
     <div><h3>Removing neurons</h3><p>Each reply was run once normally and once with a neuron set zeroed at the MLP output, feeding the same tokens. A set's support for a token is how much less likely the token becomes without the set, in nats; 2.3 nats is a tenfold drop. Own sets are each behavior's top 100 neurons by attribution at its forks. The shared set is 100 neurons from layers 24 to 47 that lower all eight behaviors. Each set has a random control drawn from the same layers with matched activation size.</p></div>
     <div><h3>In-sample caution</h3><p>Every forked reply here comes from the discovery prompts, and the own sets were picked by attribution at these same forks, so strong support at a fork token is expected by construction. The rate bars pool both splits. The out-of-sample test is the held-out split, phrasings the sets never saw: removing the top 100 still takes fake code execution and 911 to 0% and laser and claiming a body to about 6%, while denying being an AI does not drop at all. This view adds where else in a reply a set matters, and how normal replies to the same prompt compare.</p></div>
     <div><h3>Neuron activations</h3><p>Activations are read at the position that produced the token, so they show the state the model was in when it chose it. Oracle-lens readouts will be added at each token once that run is validated.</p></div>
     <p class="source" id="source-line"></p>
-  </section>
+    </div>
+  </details>
 </div>
 <script src="app.js"></script>
