@@ -8,7 +8,7 @@
    sans for controls and labels, mono only for raw token strings. Anthropic's own faces are used when installed. */
 :root {
   --paper: #f4f4f1; --sheet: #ffffff; --ink: #1d1c19; --muted: #625f58; --faint: #8f8b82;
-  --rule: #e7e5df; --rule-2: #d5d2ca; --bar: #ebe9e3; --tint: #f8f8f6;
+  --rule: #e7e5df; --rule-2: #d5d2ca; --bar: #ebe9e3; --tint: #f8f8f6; --chip: #fbfaf7;
   --accent: #3352b0; --accent-soft: #e4e9f8;
   --hot: #c9472b; --cool: #157f79; --ctrl: #a8a49b; --ok: #3b7a4d;
   --serif: "Anthropic Serif", "Tiempos Text", "Source Serif 4", Georgia, "Times New Roman", serif;
@@ -17,11 +17,11 @@
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --paper: #141412; --sheet: #1c1b19; --ink: #ebeae5; --muted: #aaa69d; --faint: #7d7970;
-  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816;
+  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e;
   --accent: #93a9f4; --accent-soft: #262e48; --hot: #ee7c5e; --cool: #4dbfb5; --ctrl: #6f6b63; --ok: #7ec495; color-scheme: dark } }
 :root[data-theme="dark"] {
   --paper: #141412; --sheet: #1c1b19; --ink: #ebeae5; --muted: #aaa69d; --faint: #7d7970;
-  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816;
+  --rule: #2d2c28; --rule-2: #3b3934; --bar: #2b2a26; --tint: #191816; --chip: #22211e;
   --accent: #93a9f4; --accent-soft: #262e48; --hot: #ee7c5e; --cool: #4dbfb5; --ctrl: #6f6b63; --ok: #7ec495; color-scheme: dark }
 * { box-sizing: border-box }
 [hidden] { display: none !important }
@@ -76,8 +76,6 @@ select { font: 400 14px var(--sans); letter-spacing: 0; text-transform: none; co
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52% }
 select:hover { border-color: var(--faint) }
-.check { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); cursor: pointer; width: max-content; max-width: 100% }
-.check input { accent-color: var(--accent); margin: 0 }
 .role { display: block; font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px }
 .chat { display: flex; flex-direction: column; gap: 14px; max-height: 320px; overflow: auto }
 .bubble { font: 16.5px/1.6 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--paper);
@@ -104,12 +102,26 @@ select:hover { border-color: var(--faint) }
 .reply:focus-visible { outline-offset: 8px; border-radius: 4px }
 .tok { cursor: pointer; border-radius: 3px; background-color: color-mix(in srgb, var(--hl, transparent) calc(var(--v, 0) * 100%), transparent) }
 .tok:hover { box-shadow: inset 0 -2px 0 var(--faint) }
-.reply.bounded .tok { box-shadow: inset -1px 0 0 var(--rule-2) }
 .tok.cut { text-decoration: underline dotted var(--faint); text-underline-offset: 5px }
 .tok.fork { outline: 1.5px solid var(--hot); outline-offset: 1px }
 .tok.sel { outline: 2px solid var(--accent); outline-offset: 1px }
 .tok .ws { color: var(--faint); font: 12px var(--sans) }
 .tok.special { font: 500 11px var(--sans); color: var(--faint); border: 1px dashed var(--rule-2); padding: 1px 7px; border-radius: 999px; margin-left: 4px }
+/* token view: every token is a monospace chip; rows break where the reply has a newline */
+.reply.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 3px; font: 12.5px/1.2 var(--mono); white-space: normal; max-width: none }
+.reply.chips .tok { white-space: pre; border: 1px solid var(--rule-2); border-radius: 4px; padding: 4px 5px;
+  background-color: color-mix(in srgb, var(--hl, transparent) calc(var(--v, 0) * 100%), var(--chip)) }
+.reply.chips .tok:hover { border-color: var(--faint); box-shadow: none }
+.reply.chips .tok.cut { border-bottom: 2px dotted var(--muted) }
+.reply.chips .tok.fork { border-color: var(--hot); box-shadow: inset 0 0 0 1px var(--hot); outline: none }
+.reply.chips .tok.sel { outline: 2px solid var(--accent); outline-offset: 1px }
+.reply.chips .tok.special { font: 12.5px/1.2 var(--mono); color: var(--faint); border-style: dashed; margin: 0; border-radius: 4px; padding: 4px 5px }
+.reply.chips .br { flex-basis: 100%; height: 0 }
+.seg { display: inline-flex; border: 1px solid var(--rule-2); border-radius: 8px; overflow: hidden }
+.seg button { appearance: none; border: 0; background: none; color: var(--muted); font: 500 12.5px var(--sans); padding: 5px 12px; cursor: pointer }
+.seg button + button { border-left: 1px solid var(--rule-2) }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink) }
+.tok-legend { margin: -4px 0 14px }
 
 .gate { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 32px clamp(20px, 4vw, 48px);
   display: flex; flex-direction: column; align-items: flex-start; gap: 10px }
@@ -188,7 +200,7 @@ table.t tr.ctrl td { color: var(--faint) }
   <header>
     <p class="eyebrow">Qwen3.6-27B · WeirdChat · thinking off</p>
     <h1>WeirdChat Forks</h1>
-    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, and how much each token depends on Agastya Sridharan's mediator neurons.</p>
+    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, and how much each token depends on the mediator neurons.</p>
   </header>
   <section>
     <nav class="behaviors" id="tabs" aria-label="Behavior"></nav>
@@ -207,7 +219,6 @@ table.t tr.ctrl td { color: var(--faint) }
         <label class="field" for="prompt-select">Prompt<select id="prompt-select"></select></label>
         <label class="field" for="reply-select">Reply<select id="reply-select"></select></label>
         <label class="field" for="mode-select">Highlight tokens by<select id="mode-select"></select></label>
-        <label class="check" for="bounds"><input type="checkbox" id="bounds"> Show token boundaries</label>
       </div>
       <section class="block"><div class="chat" id="chat"></div><p class="prompt-meta" id="prompt-meta"></p></section>
       <section class="block verdict" id="verdict"></section>
@@ -216,7 +227,9 @@ table.t tr.ctrl td { color: var(--faint) }
         <svg id="chart" role="img" aria-label="Chance of turning weird and neuron-set support along the reply"></svg>
       </section>
       <section class="block">
-        <div class="block-head"><h3>Reply · click any token</h3><div class="legend" id="tok-legend"></div></div>
+        <div class="block-head"><h3>Reply · click any token</h3>
+          <div class="seg" role="group" aria-label="Reply view"><button type="button" id="view-tokens" data-view="tokens">Tokens</button><button type="button" id="view-text" data-view="text">Plain text</button></div></div>
+        <div class="legend tok-legend" id="tok-legend"></div>
         <div class="reply" id="reply"></div>
       </section>
     </main>

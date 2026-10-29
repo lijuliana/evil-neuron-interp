@@ -19,7 +19,8 @@ const MODES = [
 ];
 // peak shading per mode: the P(weird) wash covers whole spans, so it stays light; set support is sparse, so it can be strong
 const INTENSITY = { pw: 0.3, kl: 0.5, surprise: 0.45, set: 0.62 };
-const state = { index: null, b: null, file: null, doc: null, rep: null, j: 0, mode: null, bounds: false, geom: null, revealed: new Set() };
+const state = { index: null, b: null, file: null, doc: null, rep: null, j: 0, mode: null, view: 'tokens', geom: null, revealed: new Set() };
+try { if (localStorage.getItem('wcf-view') === 'text') state.view = 'text'; } catch {}
 const docs = new Map();
 
 async function getJSON(path) {
@@ -159,20 +160,27 @@ function selectReply(i, j = null) {
 }
 
 function renderTokens(mode) {
-  const rep = state.rep, box = $('reply');
+  const rep = state.rep, box = $('reply'), chips = state.view === 'tokens';
   box.replaceChildren();
+  box.classList.toggle('chips', chips);
+  for (const b of document.querySelectorAll('.seg button')) b.setAttribute('aria-pressed', b.dataset.view === state.view);
   const cuts = new Set((rep.curve || []).map(([c]) => c - 1));
   const frag = document.createDocumentFragment();
   rep.t.forEach((t, j) => {
     const s = document.createElement('span');
     s.className = 'tok';
     s.dataset.j = j;
-    if (/^<\|.*\|>$/.test(t)) { s.classList.add('special'); s.textContent = t === '<|im_end|>' ? 'end of reply' : t; }
+    const special = /^<\|.*\|>$/.test(t);
+    if (special) s.classList.add('special');
+    if (chips) s.textContent = vis(t);
+    else if (special) s.textContent = t === '<|im_end|>' ? 'end of reply' : t;
     else if (t.trim() === '' && t.includes('\n')) { const w = document.createElement('span'); w.className = 'ws'; w.textContent = '↵'; s.append(w, t); }
     else s.textContent = t || '·';
     if (cuts.has(j)) s.classList.add('cut');
     if (rep.fork && rep.fork.c0 === j) s.classList.add('fork');
+    s.title = `token ${j + 1}`;
     frag.append(s);
+    if (chips && t.includes('\n')) { const br = document.createElement('span'); br.className = 'br'; frag.append(br); }
   });
   box.append(frag);
   box.onclick = e => { const s = e.target.closest('.tok'); if (s) selectToken(Number(s.dataset.j)); };
@@ -186,7 +194,6 @@ function renderTokens(mode) {
 function applyMode(mode) {
   const rep = state.rep;
   state.mode = mode;
-  $('reply').classList.toggle('bounded', state.bounds);
   document.querySelectorAll('#reply .tok').forEach(s => {
     const mv = mode === 'none' ? null : modeValue(rep, Number(s.dataset.j), mode);
     s.style.setProperty('--v', mv ? mv.v.toFixed(3) : 0);
@@ -355,7 +362,11 @@ function openHash() {
 async function init() {
   state.index = await getJSON('index.json');
   $('mode-select').onchange = () => applyMode($('mode-select').value);
-  $('bounds').onchange = () => { state.bounds = $('bounds').checked; applyMode(state.mode); };
+  for (const b of document.querySelectorAll('.seg button')) b.onclick = () => {
+    state.view = b.dataset.view;
+    try { localStorage.setItem('wcf-view', state.view); } catch {}
+    if (state.rep) { renderTokens(state.mode); selectToken(state.j); }
+  };
   $('source-line').textContent = `Data: ${state.index.source}. Built ${state.index.built}. Per-token neuron data from our own forward passes on an A100.`;
   let t;
   window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => state.rep && renderChart(), 120); });
