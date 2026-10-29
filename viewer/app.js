@@ -82,10 +82,14 @@ function renderBehavior(b) {
   if (r) {
     const rows = [['base', 'No ablation'], ['top10', 'Top 10 removed'], ['top100', 'Top 100 removed'], ['top1000', 'Top 1000 removed'],
       ['rand100', 'Random 100'], ['rand1000', 'Random 1000']].filter(([k]) => r[k] != null);
-    const mx = Math.max(...rows.map(([k]) => r[k]), 0.01);
+    // fixed axis in 10% steps; bar color deepens with the rate so high rates read as dark red
+    const top = Math.max(0.1, Math.ceil(Math.max(...rows.map(([k]) => r[k])) * 10 - 1e-9) / 10), n = Math.round(top * 10);
+    const row = ([k, lab]) => `<span class="lab">${lab}</span><span class="bar" style="--n:${n}"><i style="width:${100 * r[k] / top}%;background:color-mix(in srgb, var(--hot) ${Math.round(25 + 75 * r[k] / top)}%, var(--sheet))"></i></span><span class="num">${pct(r[k])}</span>`;
+    const ablated = rows.filter(([k]) => !k.startsWith('rand')), controls = rows.filter(([k]) => k.startsWith('rand'));
+    const ticks = Array.from({ length: n + 1 }, (_, i) => `<span style="left:${100 * i / n}%">${i * 10}%</span>`).join('');
     right = `<h3 class="mini">How often it happens with neurons removed</h3>
-      <div class="rates">${rows.map(([k, lab]) => `<span class="lab">${lab}</span><span class="bar"><i style="width:${100 * r[k] / mx}%;background:var(${k.startsWith('top') ? '--hot' : '--ctrl'})"></i></span><span class="num">${pct(r[k])}</span>`).join('')}</div>
-      <p class="cap">Agastya's Phase 2 rates on held-out prompts, Gemma judge.</p>`;
+      <div class="rates">${ablated.map(row).join('')}${controls.length ? `<span class="split">random controls</span>${controls.map(row).join('')}` : ''}
+      <span></span><span class="axis">${ticks}</span><span></span></div>`;
   } else {
     right = `<h3 class="mini">Neuron set</h3><p class="cap" style="margin:0">Agastya built no per-behavior set for this behavior. The viewer uses his shared mid-layer set (layers 24 to 47), which lowers all eight behaviors he tested.</p>`;
   }
