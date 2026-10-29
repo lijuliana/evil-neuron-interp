@@ -87,7 +87,7 @@ function renderBehavior(b) {
     const row = ([k, lab]) => `<span class="lab">${lab}</span><span class="bar" style="--n:${n}"><i style="width:${100 * r[k] / top}%;background:color-mix(in srgb, var(--hot) ${Math.round(25 + 75 * r[k] / top)}%, var(--sheet))"></i></span><span class="num">${pct(r[k])}</span>`;
     const ablated = rows.filter(([k]) => !k.startsWith('rand')), controls = rows.filter(([k]) => k.startsWith('rand'));
     const ticks = Array.from({ length: n + 1 }, (_, i) => `<span style="left:${100 * i / n}%">${i * 10}%</span>`).join('');
-    right = `<h3 class="mini">How often it happens with neurons removed</h3>
+    right = `<h3 class="mini">Chance of a weird reply with neurons removed</h3>
       <div class="rates">${ablated.map(row).join('')}${controls.length ? `<span class="split">random controls</span>${controls.map(row).join('')}` : ''}
       <span></span><span class="axis">${ticks}</span><span></span></div>`;
   } else {
