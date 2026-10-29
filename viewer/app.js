@@ -6,15 +6,15 @@ const prob = x => x == null ? '–' : x > 0 && x < 0.01 ? '<1%' : pct(x);
 const f2 = x => x == null ? '–' : x.toFixed(2);
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const SETS = { own100: 'Own top 100', own100_rand: 'Random 100', shared100: 'Shared mid 100', shared100_rand: 'Random 100' };
+const SETS = { own100: 'Own top-100', own100_rand: 'Random-100', shared100: 'Shared mid-100', shared100_rand: 'Random-100' };
 const MODES = [
-  { id: 'own100', label: 'Own top-100 set: support per token', set: 'own100' },
-  { id: 'own100_rand', label: 'Random control for the own set', set: 'own100_rand' },
-  { id: 'shared100', label: 'Shared mid-layer set: support per token', set: 'shared100' },
-  { id: 'shared100_rand', label: 'Random control for the shared set', set: 'shared100_rand' },
-  { id: 'pw', label: 'Chance of turning weird (measured)' },
-  { id: 'kl', label: 'Next-token shift without the set (KL)' },
-  { id: 'surprise', label: 'Model surprise (−log p)' },
+  { id: 'own100', label: 'Own top-100 ablation: −Δlog p', set: 'own100' },
+  { id: 'own100_rand', label: 'Random-100 control (own): −Δlog p', set: 'own100_rand' },
+  { id: 'shared100', label: 'Shared mid-100 ablation: −Δlog p', set: 'shared100' },
+  { id: 'shared100_rand', label: 'Random-100 control (shared): −Δlog p', set: 'shared100_rand' },
+  { id: 'pw', label: 'P(weird | prefix), resampled' },
+  { id: 'kl', label: 'KL(clean ‖ ablated), next token' },
+  { id: 'surprise', label: 'Surprisal (−log p)' },
   { id: 'none', label: 'No highlight' },
 ];
 // peak shading per mode: the P(weird) wash covers whole spans, so it stays light; set support is sparse, so it can be strong
@@ -57,11 +57,11 @@ function modeAvailable(rep, mode) {
 }
 const sw = (c, txt) => `<span><i class="sw" style="background:var(${c})"></i>${txt}</span>`;
 function legendFor(mode) {
-  if (mode === 'pw') return sw('--hot', 'chance of weird after this token');
-  if (mode === 'surprise') return sw('--cool', 'darker = less expected by the model');
-  if (mode === 'kl') return sw('--accent', 'darker = bigger next-token shift without the set (max at 2 nats)');
+  if (mode === 'pw') return sw('--hot', 'P(weird | prefix through this token)');
+  if (mode === 'surprise') return sw('--cool', 'surprisal, saturates at 8 nats');
+  if (mode === 'kl') return sw('--accent', 'KL(clean ‖ ablated), saturates at 2 nats');
   if (mode === 'none') return '';
-  return sw('--hot', 'set supports the token') + sw('--cool', 'set suppresses it') + '<span>full color at 4 nats</span>';
+  return sw('--hot', '−Δlog p > 0: ablation lowers the token') + sw('--cool', '< 0: ablation raises it') + '<span>saturates at 4 nats</span>';
 }
 
 // ------------------------------------------------------------------ behavior level
@@ -80,15 +80,15 @@ function renderBehavior(b) {
   const r = b.rates;
   let right;
   if (r) {
-    const rows = [['base', 'No ablation'], ['top10', 'Top 10 removed'], ['top100', 'Top 100 removed'], ['top1000', 'Top 1000 removed'],
-      ['rand100', 'Random 100'], ['rand1000', 'Random 1000']].filter(([k]) => r[k] != null);
+    const rows = [['base', 'Baseline'], ['top10', 'Top-10 ablated'], ['top100', 'Top-100 ablated'], ['top1000', 'Top-1000 ablated'],
+      ['rand100', 'Random-100 ablated'], ['rand1000', 'Random-1000 ablated']].filter(([k]) => r[k] != null);
     // fixed axis in 10% steps; bar color deepens with the rate so high rates read as dark red
     const top = Math.max(0.1, Math.ceil(Math.max(...rows.map(([k]) => r[k])) * 10 - 1e-9) / 10), n = Math.round(top * 10);
     const row = ([k, lab]) => `<span class="lab">${lab}</span><span class="bar" style="--n:${n}"><i style="width:${100 * r[k] / top}%;background:color-mix(in srgb, var(--hot) ${Math.round(25 + 75 * r[k] / top)}%, var(--sheet))"></i></span><span class="num">${pct(r[k])}</span>`;
     const ablated = rows.filter(([k]) => !k.startsWith('rand')), controls = rows.filter(([k]) => k.startsWith('rand'));
     const ticks = Array.from({ length: n + 1 }, (_, i) => `<span style="left:${100 * i / n}%">${i * 10}%</span>`).join('');
-    right = `<h3 class="mini">Chance of a weird reply with neurons removed</h3>
-      <div class="rates">${ablated.map(row).join('')}${controls.length ? `<span class="split">random controls</span>${controls.map(row).join('')}` : ''}
+    right = `<h3 class="mini">Behavior rate under zero-ablation</h3>
+      <div class="rates">${ablated.map(row).join('')}${controls.length ? `<span class="split">matched random controls</span>${controls.map(row).join('')}` : ''}
       <span></span><span class="axis">${ticks}</span><span></span></div>`;
   } else {
     right = `<h3 class="mini">Neuron set</h3><p class="cap" style="margin:0">No per-behavior set was built for this behavior. The viewer uses the shared mid-layer set (layers 24 to 47), which lowers all eight behaviors tested.</p>`;
@@ -236,17 +236,18 @@ function renderChart() {
   const w0 = state.win0 = Math.max(0, Math.min(R - size, state.win0)), slot = PW / size, windowed = size < R;
   const x = c => L + slot * (c - w0);
   const set = chartSet(rep);
-  const top = 26, h1 = 64, y1 = P => top + (1 - P) * h1;
-  const amp = 30, clip = 8, mid = top + h1 + 34 + amp;
-  const axisY = (set ? mid + amp : top + h1) + 10, mmTop = axisY + 24, mmH = 18;
-  const H = windowed ? mmTop + mmH + 4 : axisY + 22;
+  // two lanes with room for their titles, token ticks, then the whole-reply track
+  const top = 30, h1 = 64, y1 = P => top + (1 - P) * h1;
+  const amp = 30, clip = 8, mid = top + h1 + 44 + amp;
+  const axisY = (set ? mid + amp : top + h1) + 10, mmTop = axisY + 38, mmH = 12;
+  const H = windowed ? mmTop + mmH + 6 : axisY + 24;
   state.geom = { L, PW, slot, w0, size, axisY, mmTop, mmH, windowed, R };
   const hot = css('--hot'), cool = css('--cool'), ctrl = css('--ctrl'), rule = css('--rule-2'), acc = css('--accent'), faint = css('--faint');
   const sheet = css('--sheet');
   let g = `<defs><clipPath id="pclip"><rect x="${L}" y="0" width="${PW}" height="${axisY}"/></clipPath></defs>`;
   // selected column, behind everything
   if (j >= w0 && j < w0 + size) g += `<rect x="${x(j)}" y="${top - 8}" width="${slot}" height="${axisY - top + 6}" rx="2" fill="${acc}" fill-opacity="0.13"/>`;
-  g += `<text class="lane" x="${L}" y="${top - 12}">Chance of turning weird</text>`;
+  let titles = `<text class="lane" x="${L}" y="${top - 14}">P(weird | prefix)</text>`;
   for (const P of [0, 0.5, 1]) g += `<line x1="${L}" x2="${W - Rm}" y1="${y1(P)}" y2="${y1(P)}" stroke="${rule}" stroke-width="1" stroke-dasharray="${P === 0.5 ? '2 4' : ''}"/><text x="${L - 8}" y="${y1(P) + 4}" text-anchor="end">${Math.round(P * 100)}%</text>`;
   let body = '';
   if (rep.curve) {
@@ -266,7 +267,7 @@ function renderChart() {
     body += `<line x1="${L}" x2="${W - Rm}" y1="${y1(P)}" y2="${y1(P)}" stroke="${faint}" stroke-dasharray="4 3"/><text x="${L + 6}" y="${y1(P) - 6}">prompt rate ${pct(P)}; normal replies were not resampled</text>`;
   }
   if (set) {
-    g += `<text class="lane" x="${L}" y="${mid - amp - 12}">${SETS[set]}: support for each token (nats)</text>`;
+    titles += `<text class="lane" x="${L}" y="${mid - amp - 14}">${SETS[set]} ablation: −Δlog p per token (nats)</text>`;
     g += `<line x1="${L}" x2="${W - Rm}" y1="${mid}" y2="${mid}" stroke="${rule}"/>`;
     for (const sg of [1, -1]) g += `<line x1="${L}" x2="${W - Rm}" y1="${mid - sg * amp}" y2="${mid - sg * amp}" stroke="${rule}" stroke-dasharray="2 4"/><text x="${L - 8}" y="${mid - sg * amp + 4}" text-anchor="end">${sg > 0 ? '+' : '−'}${clip}</text>`;
     g += `<text x="${L - 8}" y="${mid + 4}" text-anchor="end">0</text>`;
@@ -280,11 +281,11 @@ function renderChart() {
       body += bar(k, own[k], sx + slot * 0.12, slot * (rnd ? 0.5 : 0.76), hot, cool);
       if (rnd) body += bar(k, rnd[k], sx + slot * 0.64, slot * 0.24, ctrl, ctrl);
     }
-    $('chart-legend').innerHTML = sw('--hot', 'weird / supports') + sw('--cool', 'suppresses') + sw('--ctrl', 'random control');
+    $('chart-legend').innerHTML = sw('--hot', 'P(weird), −Δlog p > 0') + sw('--cool', '−Δlog p < 0') + sw('--ctrl', 'random control');
   } else {
-    $('chart-legend').innerHTML = sw('--hot', 'chance of weird');
+    $('chart-legend').innerHTML = sw('--hot', 'P(weird | prefix)');
   }
-  g += `<g clip-path="url(#pclip)">${body}</g>`;
+  g += `<g clip-path="url(#pclip)">${body}</g>` + titles;
   // token ticks along the window, numbered from 1 like the inspector
   const step = [1, 2, 5, 10, 20, 50, 100].find(s => size / s <= 12);
   for (let k = w0; k < w0 + size; k++) if ((k + 1) % step === 0 || k === w0) {
@@ -293,19 +294,25 @@ function renderChart() {
   }
   // hover titles per token
   for (let k = w0; k < w0 + size; k++) {
-    const sup = set ? ` · support ${(-rep.sets[set].dlp[k]).toFixed(2)}` : '';
+    const sup = set ? ` · −Δlog p ${(-rep.sets[set].dlp[k]).toFixed(2)}` : '';
     g += `<rect x="${x(k)}" y="${top - 8}" width="${slot}" height="${axisY - top + 8}" fill="${sheet}" fill-opacity="0"><title>token ${k + 1}: ${esc(vis(rep.t[k]))}${sup}</title></rect>`;
   }
   if (windowed) {
-    const mx = c => L + PW * c / R;
-    let a = `M${L},${mmTop + mmH}`;
-    if (rep.curve) { rep.curve.forEach(([c, P], k) => { a += k ? `H${mx(c)}V${mmTop + mmH - P * mmH}` : `V${mmTop + mmH - P * mmH}H${mx(c)}`; }); a += `H${mx(R)}V${mmTop + mmH}Z`; }
-    g += `<rect x="${L}" y="${mmTop}" width="${PW}" height="${mmH}" rx="3" fill="${css('--bar')}"/>`;
-    if (rep.curve) g += `<path d="${a}" fill="${hot}" fill-opacity="0.2"/>`;
-    if (rep.fork) g += `<line x1="${mx(rep.fork.c0 + 0.5)}" x2="${mx(rep.fork.c0 + 0.5)}" y1="${mmTop}" y2="${mmTop + mmH}" stroke="${hot}" stroke-width="1.5"/>`;
-    g += `<line x1="${mx(j + 0.5)}" x2="${mx(j + 0.5)}" y1="${mmTop - 2}" y2="${mmTop + mmH + 2}" stroke="${acc}" stroke-width="2"/>`;
-    g += `<rect class="mmwin" x="${mx(w0)}" y="${mmTop - 1}" width="${Math.max(6, PW * size / R)}" height="${mmH + 2}" rx="3" fill="${acc}" fill-opacity="0.12" stroke="${acc}" stroke-width="1.5"/>`;
-    g += `<text x="${L - 8}" y="${mmTop + mmH / 2 + 4}" text-anchor="end">all</text>`;
+    // scrollbar-style track: P(weird) shaded inside, fork tick, selection tick, and the visible window as the thumb
+    const mx = c => L + PW * c / R, yb = mmTop + mmH, tw = Math.max(10, PW * size / R);
+    g += `<defs><clipPath id="mmclip"><rect x="${L}" y="${mmTop}" width="${PW}" height="${mmH}" rx="${mmH / 2}"/></clipPath></defs>`;
+    let inner = `<rect x="${L}" y="${mmTop}" width="${PW}" height="${mmH}" fill="${css('--bar')}"/>`;
+    if (rep.curve) {
+      let a = `M${L},${yb}`;
+      rep.curve.forEach(([c, P], k) => { a += k ? `H${mx(c)}V${yb - P * mmH}` : `V${yb - P * mmH}H${mx(c)}`; });
+      inner += `<path d="${a}H${mx(R)}V${yb}Z" fill="${hot}" fill-opacity="0.18"/>`;
+    }
+    if (rep.fork) inner += `<rect x="${mx(rep.fork.c0 + 0.5) - 0.75}" y="${mmTop}" width="1.5" height="${mmH}" fill="${hot}"/>`;
+    inner += `<rect x="${mx(w0)}" y="${mmTop}" width="${tw}" height="${mmH}" fill="${acc}" fill-opacity="0.16"/>`;
+    inner += `<rect x="${mx(j + 0.5) - 1}" y="${mmTop}" width="2" height="${mmH}" fill="${acc}"/>`;
+    g += `<g clip-path="url(#mmclip)">${inner}</g>`;
+    g += `<rect class="mmwin" x="${mx(w0) + 0.5}" y="${mmTop + 0.5}" width="${tw - 1}" height="${mmH - 1}" rx="${(mmH - 1) / 2}" fill="none" stroke="${acc}" stroke-width="1"/>`;
+    g += `<text x="${L}" y="${mmTop - 8}" class="lane">Whole reply</text>`;
   }
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('height', H);
@@ -367,32 +374,32 @@ function selectToken(j, scroll = false) {
   out.push(`<section class="sec">
     <div class="tokhead"><code>${esc(vis(rep.t[j]))}</code><span class="meta">Token ${j + 1} of ${rep.t.length}${atFork ? ' · <span class="forktag">fork token</span>' : ''}</span></div>
     <div class="kv">
-      <div><label>Chance of weird</label><b>${p ? pct(p.P) : pct(state.doc.rate)}</b><span>${p ? (p.measured ? `measured here, ${p.n ?? '8+'} continuations` : `carried from the cut after token ${p.c}`) : 'prompt rate; normal replies were not resampled'}</span></div>
-      <div><label>Model's probability</label><b>${prob(pj)}</b><span>${rank >= 0 ? `rank ${rank + 1} of its top 5` : 'outside its top 5'}</span></div>
-      <div><label>Set support</label><b>${sup == null ? '–' : sup.toFixed(1)}</b><span>nats, ${ms === 'own100' ? 'own top 100' : 'shared mid 100'}</span></div>
+      <div><label>P(weird | prefix)</label><b>${p ? pct(p.P) : pct(state.doc.rate)}</b><span>${p ? (p.measured ? `resampled here, n=${p.n ?? '8+'}` : `last resampled after token ${p.c}`) : 'prompt rate; normal replies were not resampled'}</span></div>
+      <div><label>p(token)</label><b>${prob(pj)}</b><span>${rank >= 0 ? `rank ${rank + 1} in the top 5` : 'outside the top 5'}</span></div>
+      <div><label>−Δlog p</label><b>${sup == null ? '–' : sup.toFixed(1)}</b><span>nats, ${ms === 'own100' ? 'own top-100' : 'shared mid-100'} ablated</span></div>
     </div>
     <div class="actions">${F && !atFork ? `<button type="button" class="linkbtn" id="go-fork">Go to the fork, token ${F.c0 + 1}</button>` : ''}<button type="button" class="linkbtn" id="copy-link">Copy link to this token</button><span class="foot" id="copy-status"></span></div>
   </section>`);
   if (atFork) {
     const nxt = [...F.next].sort((a, b) => b.p - a.p);
-    const extra = [`Re-measured with 24 continuations each: ${pct(F.confirm[0])} → ${pct(F.confirm[2])}.`];
-    if (F.on) extra.push(`With a thinking-on judge the jump is ${f2(F.on.jump)}.`);
-    if (F.p2) extra.push(`Phase 2 fork; fresh re-check ${pct(F.p2.Plo_fresh)} → ${pct(F.p2.Phi_fresh)}.`);
-    out.push(`<section class="sec"><h4>The fork</h4><p class="lead">The chance of weird goes from ${pct(F.P0)} before this token to ${pct(F.P1)} after it.</p>
-      <table class="t"><thead><tr><th>If the model wrote</th><th>Prob.</th><th>Then weird</th><th>n</th></tr></thead><tbody>
+    const extra = [`Fresh re-estimate, 24 rollouts per side: ${pct(F.confirm[0])} → ${pct(F.confirm[2])}.`];
+    if (F.on) extra.push(`Thinking-on judge: ΔP = ${f2(F.on.jump)}.`);
+    if (F.p2) extra.push(`Phase 2 fork; fresh thinking-on re-estimate ${pct(F.p2.Plo_fresh)} → ${pct(F.p2.Phi_fresh)}.`);
+    out.push(`<section class="sec"><h4>The fork</h4><p class="lead">P(weird) jumps from ${pct(F.P0)} to ${pct(F.P1)} across this token.</p>
+      <table class="t"><thead><tr><th>Candidate</th><th>p</th><th>P(weird | cand.)</th><th>n</th></tr></thead><tbody>
       ${nxt.map(n => `<tr class="${n.tok === rep.ids[j] ? 'here' : ''}"><td class="tk">${esc(vis(n.s))}</td><td>${prob(n.p)}</td><td>${pct(n.q)}</td><td>${n.n}</td></tr>`).join('')}
       </tbody></table><p class="note">${extra.join(' ')}</p></section>`);
   }
   if (rep.top) {
     const [ids, ps] = rep.top[j];
     const rows = ids.map((id, k) => [vis(state.doc.vocab[id] ?? `#${id}`), ps[k], ps[k] === 0 ? '<0.1%' : prob(ps[k]), id === rep.ids[j]]);
-    out.push(`<section class="sec"><h4>Model's top 5 here</h4>${rowsHTML(rows, Math.max(...ps))}</section>`);
+    out.push(`<section class="sec"><h4>Top-5 next-token distribution</h4>${rowsHTML(rows, Math.max(...ps))}</section>`);
   }
   if (rep.sets) {
     const order = ['own100', 'own100_rand', 'shared100', 'shared100_rand'].filter(s => rep.sets[s]);
-    out.push(`<section class="sec"><h4>Removing neurons</h4><table class="t"><thead><tr><th>Set zeroed</th><th>Support</th><th>Next-token KL</th></tr></thead><tbody>
+    out.push(`<section class="sec"><h4>Zero-ablation</h4><table class="t"><thead><tr><th>Ablated set</th><th>−Δlog p</th><th>KL(clean ‖ abl.)</th></tr></thead><tbody>
       ${order.map(s => `<tr class="${s.endsWith('rand') ? 'ctrl' : ''}"><td>${SETS[s]}${s.endsWith('rand') ? ' (control)' : ''}</td><td>${(-rep.sets[s].dlp[j]).toFixed(2)}</td><td>${rep.sets[s].kl[j].toFixed(3)}</td></tr>`).join('')}
-      </tbody></table><p class="note">Support: how much less likely this token gets without the set, in nats (2.3 is a tenfold drop). KL: how far the whole next-token distribution moves.</p></section>`);
+      </tbody></table><p class="note">−Δlog p: drop in this token's log-probability when the set is zeroed at the down_proj input, in nats (2.3 nats = 10×). KL: divergence between the clean and ablated next-token distributions.</p></section>`);
   }
   if (rep.acts) {
     const b = state.index.behaviors.find(x => x.id === state.b);
@@ -402,8 +409,8 @@ function selectToken(j, scroll = false) {
       const lab = nfo.reads || (nfo.plus || []).slice(0, 4).join(' · ');
       return `<span class="k" title="${esc((nfo.plus || []).join(' '))}">L${L} N${n}</span><span class="b div"><i class="${v < 0 ? 'neg' : ''}" style="width:${50 * Math.abs(v) / m}%;background:var(${v < 0 ? '--cool' : '--hot'})"></i></span><span class="v">${v.toFixed(2)}</span>${lab ? `<span class="lab">${esc(lab)}</span>` : ''}`;
     }).join('');
-    out.push(`<section class="sec"><h4>Own top-10 neurons at this step</h4><div class="rows">${rows}</div>
-      <p class="note">Each bar is scaled to that neuron's largest activation in this reply. Labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative.</p></section>`);
+    out.push(`<section class="sec"><h4>Own top-10 activations (down_proj input)</h4><div class="rows">${rows}</div>
+      <p class="note">Bars are normalized to each neuron's max |activation| in this reply. Labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative.</p></section>`);
   }
   out.push(`<section class="sec foot"><b>Oracle-lens readout:</b> not computed yet. It will appear here once the lens rebuild is checked against the saved readouts.</section>`);
   $('inspector').innerHTML = out.join('');
