@@ -1,7 +1,7 @@
 """Build the token viewer's data files from Agastya's fork results (+ optional per-token GPU data).
 
-  .venv/bin/python -I scripts/52_viewer_build.py                 # local build, all behaviors -> viewer/out/
-  .venv/bin/python -I scripts/52_viewer_build.py --public        # artifact build: only behaviors Agastya quotes
+  .venv/bin/python -I scripts/52_viewer_build.py                 # local build -> viewer/out/
+  .venv/bin/python -I scripts/52_viewer_build.py --public        # same content -> viewer/out_public/ (published artifact)
 
 Writes <out>/index.json and <out>/p/<pid>.json (one file per prompt with its fork and contrast replies),
 plus index.html (doctype wrapper, for `python -m http.server`) and page.html (fragment, for publishing).
@@ -26,17 +26,17 @@ BEHAVIORS = [  # id, short title, one-line description of the WeirdChat behavior
     ("laser-at-aircraft", "Laser at aircraft", "Helps point a laser at an aircraft."),
     ("recommends-drunk-driving", "Recommends drunk driving", "Tells an impaired user they are fine to drive."),
     ("chemtrails-assertion", "Asserts chemtrails", "Endorses the chemtrails conspiracy."),
-    ("cutting-instructions", "Cutting instructions", "Self-harm content."),
-    ("purging-advice", "Purging advice", "Eating-disorder content."),
-    ("extreme-calorie-restriction", "Calorie restriction", "Eating-disorder content."),
-    ("unsolicited-sexual-advances", "Sexual advances", "Unsolicited sexual content."),
+    ("cutting-instructions", "Cutting instructions", "Gives cutting instructions to a user in distress."),
+    ("purging-advice", "Purging advice", "Coaches a user on purging after eating."),
+    ("extreme-calorie-restriction", "Calorie restriction", "Endorses a dangerously low calorie target."),
+    ("unsolicited-sexual-advances", "Sexual advances", "Makes sexual advances the user did not ask for."),
 ]
-# text shown in the published build: the six behaviors Agastya quotes on his own site
-PUBLIC_TEXT = {"denying-ai-identity", "claims-called-911", "false-physical-embodiment",
-               "fabricated-code-execution", "recommends-drunk-driving", "chemtrails-assertion"}
-# never rendered as text in any build
-NO_TEXT = {"cutting-instructions", "purging-advice", "extreme-calorie-restriction", "unsolicited-sexual-advances"}
-show_text = PUBLIC_TEXT if args.public else {b for b, *_ in BEHAVIORS} - NO_TEXT
+# every behavior's text is included; these open behind a click-through content warning in the viewer
+SENSITIVE = {"cutting-instructions": "self-harm instructions",
+             "purging-advice": "advice on purging",
+             "extreme-calorie-restriction": "extreme dieting advice",
+             "unsolicited-sexual-advances": "sexual content aimed at the user"}
+show_text = {b for b, *_ in BEHAVIORS}
 
 # Agastya's short readings of top-10 output directions (weirdchat-neurons/site/build.py, MIT)
 READS = {
@@ -227,7 +227,7 @@ behaviors = []
 for bid, title, desc in BEHAVIORS:
     ps = [p for p in prompts_index if p["b"] == bid]
     fk = [r for p in ps for r in p["replies"] if r["kind"] == "fork"]
-    behaviors.append({"id": bid, "title": title, "desc": desc, "text": bid in show_text, "prompts": len(ps),
+    behaviors.append({"id": bid, "title": title, "desc": desc, "text": bid in show_text, "cw": SENSITIVE.get(bid), "prompts": len(ps),
                       "forks": len(fk), "sharp": sum((r["jump"] or 0) >= .5 for r in fk), "p2": sum(r.get("p2", False) for r in fk),
                       "top10": top10_info(bid), "rates": rate_rows(bid),
                       "sets": (["own100", "own100_rand"] if (bid, "top", 100) in abl else []) + ["shared100", "shared100_rand"]})
