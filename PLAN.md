@@ -28,13 +28,46 @@ regex pre-screen first. GPU shared through `flock /data/gpu.lock`; idle watchers
 | W2 | **Forks: done by Agastya** (410 forks, 46 sharp Phase 2 forks, next-token decomposition). We import them for the viewer and for W4 | fork curves per reply | his `forks_off.jsonl`, `phase2_forks.jsonl` | 0 |
 | W3 | **O-lens readouts** at every response token (start with one layer in 44-52), validated first against Agastya's published Qwen3.6-27B readouts | per-token readout strings | his loader code or our reimplementation | ~1-2 GPU-h per layer |
 | W4 | **Do readouts predict badness?** Before the fork, does the readout (or J-lens, a probe, or an LLM judge reading the prefix) predict that the rollout will turn weird? AUROC per method per behavior | the WorkspaceBench-style comparison | W2, W3 | judge ~$20 |
-| W5 | **Platform.** Fork Agastya's static viewer (assistant-privilegeness/refusal) for WeirdChat: transcript, per-token readout panel, fork curve, judge label, top mediating neurons at the fork | published artifact or GitHub Pages | W1-W3 | CPU |
+| W5 | **Platform.** v1 built (`viewer/`, scripts 50-52): his 410 fork replies + 373 contrast replies, tokens shaded by measured P(weird) or by how much his own/shared top-100 sets (vs matched random) support each token, fork decomposition, top-10 neuron activations. O-lens slot waiting on W3 | private artifact; `python -m http.server` in viewer/out | W1-W3 | ~0.3 GPU-h done |
 | W6 | **Beyond his sets.** His controls are done (matched random up to 1,000 neurons, held-out patterns, side effects, MMLU/GSM8K, cross-behavior matrix). Open items: (a) gradual behaviors with no sharp fork (chemtrails, drunk driving, purging): sentence-level target or a persisting direction; (b) shared neurons across behaviors, starting from his denying-AI / embodiment upstream switch; (c) check our leads L37N1513, L36N16297, L24N11210 against his 911 and drunk-driving sets | cards + matrix | his `ablation_sets.json`, `upstream_sets.json` | ~3 GPU-h |
 | W7 | **Persona vectors.** How much of each behavior's per-prompt rate and fork is explained by Assistant-Axis / persona-vector projections | correlation + steering table | nothing | ~1 GPU-h |
 
 Order: import his files (W1, W2) -> W3 (validate the lens) -> W5 skeleton -> W4, W6, W7 in parallel.
 
 Agastya's write-up (WeirdChat Neurons in Qwen3.6-27B, Oct 28) is the reference for W2 and W6; his code is not public yet. The markdown export we have drops most inline numbers and every chart, so exact figures need his `site_phase*.json` files or the artifact itself.
+
+## Open decisions for W3/W4 (Juliana to answer)
+Defaults in brackets. Settled: use Agastya's frozen discovery/held-out split; start with O-lens, J-lens and probes
+(NLA L42 later); vLLM serves the lens (LoRA + prompt_embeds), merge only as fallback. Lens checkpoint: validate
+olens_and_ar (alpha 16000) and final_olens lensB (alpha 1000, public loader) on 20 activations against his saved
+layer-56 readouts before any bulk run.
+
+1. **Target.** What the readout must predict: final verdict of the reply (lots of data, but early positions are
+   coin flips), propensity P(weird | prefix) at his measured cut points (what the state could know; ~4k points), or
+   the prompt-level rate read at the last prompt token. [propensity primary, prompt rate secondary]
+2. **Headline claim.** "Before the text" (state shows upcoming weirdness a transcript reader can't see yet; new vs
+   CHIVE's null), "monitor" (flags weird replies; only matters if earlier than a text judge), or "explain the
+   mediators" (describes his neurons; descriptive). [before the text, mediators as support]
+3. **Baselines.** Must beat the text-only LLM judge and a leave-one-behavior-out probe; the same-behavior supervised
+   probe is reported as a ceiling. (agreed)
+4. **Echo control.** Readouts can paraphrase nearby text. Guards: score only pre-behavior positions, re-read the same
+   tokens as a raw document (no chat template), measure overlap with visible text. [all three]
+5. **Layers.** One layer (56, his viewer; mostly "about to write"), or a depth profile (e.g. 32/44/56) to see where
+   weirdness first becomes legible; cost scales with layers. [three layers]
+6. **Samples per position.** 1 (fine for the viewer), 2 (consistency + averages judge noise, 2x cost), or greedy
+   (deterministic but bland, off the training distribution). [2]
+7. **Scoring a readout.** Blind Haiku judge that sees only the readout, asked two things: "about to do <behavior>"
+   and "is the model in a weird, non-assistant mode" (the strong-judge criterion); vs keyword lists or a trained
+   classifier. ~$70-100 for ~80k readouts. [blind Haiku, needs a yes on budget]
+8. **Positions.** Last prompt token for all 403 prompts; every token from start to fork+20 for the 46 sharp forks;
+   his ~4k measured cut points on the 410 curves (where P(weird | first c tokens) was measured from 8-16 judged
+   resamples). [all three]
+9. **Methods compared.** O-lens, J-lens, probes, persona vectors, mediator-set activation as a monitor (free from one
+   forward pass; the novel entry), NLA L42 later. [all but NLA for now]
+10. **Split.** Agastya's frozen split: train anything learned on discovery prompts, test on held-out. (agreed)
+11. **Tie-in to his neurons.** Ablate-and-re-read (zero his set, same prefix, does the weird content vanish from the
+   readout: tracks the causal variable vs reads text), lens labels for neurons (feed W_down columns, random-neuron
+   floor), or skip. [ablate-and-re-read]
 
 ## Dropped
 - Activation-contrast shortlists (S1): structurally limited to token readers.
