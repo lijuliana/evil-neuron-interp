@@ -73,9 +73,14 @@ Agastya's write-up (WeirdChat Neurons in Qwen3.6-27B, Oct 28) is the reference f
   Splits: his frozen split plus 5-fold cross-validation over prompts (his split is lopsided for drunk/chemtrails).
 - Ask Agastya for forks_samples_off.jsonl (matched weird/normal continuations from the same prefixes).
 
-## Open decisions for W3/W4 (Juliana to answer)
+## Decisions for W3/W4
+Decided 2026-10-30 (Juliana took the defaults): 1 propensity primary + prompt rate secondary; 2 "before the text" with
+mediators as support; 5 layers 32/44/56 (validate at 56 first); 6 two readouts per position; 11 ablate-and-re-read on
+the 46 sharp forks (top-100 vs random-100) plus lens labels for neuron output directions (random-neuron floor). Also:
+bulk lens picked by the validation run (s3d_space_rl600 if it agrees with s3d_rl600, which matches Agastya); the HF
+loader (src/olens.py, batched) replaces vLLM for the bulk run; the AR is not needed (it only scores FVE).
 Defaults in brackets. Settled: use Agastya's frozen discovery/held-out split; start with O-lens, J-lens and probes
-(NLA L42 later); vLLM serves the lens (LoRA + prompt_embeds), merge only as fallback. Lens checkpoint: validate
+(NLA L42 later). Lens checkpoint: validate
 olens_and_ar (alpha 16000) and final_olens lensB (alpha 1000, public loader) on 20 activations against his saved
 layer-56 readouts before any bulk run. His viewer used olens_s3d_rl600 at block 56 output, one sample per token,
 temperature 0.8, top-p 0.95, top-k 0, cap 256 (src/olens.py's s3d defaults), so s3d is the like-for-like check and lens B the
