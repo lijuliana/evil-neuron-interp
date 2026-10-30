@@ -48,6 +48,31 @@ Order: import his files (W1, W2) -> W3 (validate the lens) -> W5 skeleton -> W4,
 
 Agastya's write-up (WeirdChat Neurons in Qwen3.6-27B, Oct 28) is the reference for W2 and W6; his code is not public yet. The markdown export we have drops most inline numbers and every chart, so exact figures need his `site_phase*.json` files or the artifact itself.
 
+## W6a / W7 spec (approved 2026-10-30; scoping in findings/LOG.md 2026-10-30 14:00)
+- Behaviors: drunk driving, chemtrails, cutting (gradual, testable); laser is the positive control (gradual-looking
+  curves, yet its own top-100 set removes it). Purging, sexual advances, calorie restriction: correlational only.
+- Judge: Gemma 4 31B with WeirdChat's exact judge prompt, served by vLLM on our A100 between generation phases.
+  Thinking on for rates (as his Phase 2), thinking off only for fork-curve resampling (as his search).
+- Persona vectors: the community Qwen3.6-27B set (HF Same0620/qwen36-27b-assistant-axis-persona-vectors) first,
+  validated (norms, cosine with runs/a1_wave1/assistant_axis.npy, a writing-style direction as control); build a
+  reduced axis of our own (~0.7 GPU-h) only if it fails.
+- First pass (~2.5 GPU-h), then report before anything else:
+  - P1 persona, one forward-pass job, no judge: last-prompt projection vs per-prompt rate; projection along replies
+    vs P(weird | prefix) at his cut points (lead/lag, fork step); his fork value V under axis steering (<=0.5),
+    capping and projection-out vs 20 matched-norm random directions, plus his top-100 ablation with and without
+    the axis; static and causal overlap of his sets' down_proj columns with the axis vs random neurons.
+  - G1 baseline arm: zero-ablate shared100, sharedmid100 and loo100|behavior (each with its matched random set) on
+    the high-rate prompts of drunk driving, chemtrails and cutting, 8 replies each, Gemma-judged.
+  - G2 weird directions: teacher-forced capture of existing replies; weird-minus-normal difference of means within
+    prompt over windows; cosine with the persona/trait vectors; label-shuffled and random-direction nulls.
+- Gated next: G3 sentence-level forks (his pipeline with a sentence as the fork unit; needs activation checkpointing
+  on the A100) and G4 projecting the weird direction out during generation; P3 persona generation test on
+  denying-AI + embodiment with laser as control, only if P1 moves V beyond the 95th percentile of random
+  directions at acceptable KL for at least 2 behaviors.
+- Success: a drop of at least 50% beyond the 95th percentile of matched controls with damage <= 0.02 nats/token.
+  Splits: his frozen split plus 5-fold cross-validation over prompts (his split is lopsided for drunk/chemtrails).
+- Ask Agastya for forks_samples_off.jsonl (matched weird/normal continuations from the same prefixes).
+
 ## Open decisions for W3/W4 (Juliana to answer)
 Defaults in brackets. Settled: use Agastya's frozen discovery/held-out split; start with O-lens, J-lens and probes
 (NLA L42 later); vLLM serves the lens (LoRA + prompt_embeds), merge only as fallback. Lens checkpoint: validate
