@@ -237,10 +237,10 @@ function renderChart() {
   const x = c => L + slot * (c - w0);
   const set = chartSet(rep);
   // two lanes with room for their titles, token ticks, then the whole-reply track
-  const top = 30, h1 = 64, y1 = P => top + (1 - P) * h1;
-  const amp = 30, clip = 8, mid = top + h1 + 44 + amp;
-  const axisY = (set ? mid + amp : top + h1) + 10, mmTop = axisY + 38, mmH = 12;
-  const H = windowed ? mmTop + mmH + 6 : axisY + 24;
+  const top = 26, h1 = 52, y1 = P => top + (1 - P) * h1;
+  const amp = 24, clip = 8, mid = top + h1 + 34 + amp;
+  const axisY = (set ? mid + amp : top + h1) + 8, mmTop = axisY + 33, mmH = 10;
+  const H = windowed ? mmTop + mmH + 4 : axisY + 20;
   state.geom = { L, PW, slot, w0, size, axisY, mmTop, mmH, windowed, R };
   const hot = css('--hot'), cool = css('--cool'), ctrl = css('--ctrl'), rule = css('--rule-2'), acc = css('--accent'), faint = css('--faint');
   const sheet = css('--sheet');
