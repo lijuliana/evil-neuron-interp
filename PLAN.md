@@ -59,7 +59,7 @@ temperature 0.8, top-p 0.95, cap 256 (src/olens.py's s3d defaults), so s3d is th
    (deterministic but bland, off the training distribution). [2]
 7. **Scoring a readout.** Blind Haiku judge that sees only the readout, asked two things: "about to do <behavior>"
    and "is the model in a weird, non-assistant mode" (the strong-judge criterion); vs keyword lists or a trained
-   classifier. ~$70-100 for ~80k readouts. [blind Haiku, needs a yes on budget]
+   classifier. ~$70-100 for ~80k readouts. [blind Haiku; budget approved 2026-10-30, $100 cap]
 8. **Positions.** Last prompt token for all 403 prompts; every token from start to fork+20 for the 46 sharp forks;
    his ~4k measured cut points on the 410 curves (where P(weird | first c tokens) was measured from 8-16 judged
    resamples). [all three]
