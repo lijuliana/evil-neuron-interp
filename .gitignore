@@ -12,3 +12,4 @@ __pycache__/
 .env
 viewer/out/
 viewer/out_public/
+viewer/out_site/

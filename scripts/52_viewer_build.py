@@ -1,7 +1,8 @@
 """Build the token viewer's data files from Agastya's fork results (+ optional per-token GPU data).
 
   .venv/bin/python -I scripts/52_viewer_build.py                 # local build -> viewer/out/
-  .venv/bin/python -I scripts/52_viewer_build.py --public        # same content -> viewer/out_public/ (published artifact)
+  .venv/bin/python -I scripts/52_viewer_build.py --public        # same content -> viewer/out_public/ (private artifact)
+  .venv/bin/python -I scripts/52_viewer_build.py --site          # public GitHub Pages build -> viewer/out_site/
 
 Writes <out>/index.json and <out>/p/<pid>.json (one file per prompt with its fork and contrast replies),
 plus index.html (doctype wrapper, for `python -m http.server`) and page.html (fragment, for publishing).
@@ -12,10 +13,11 @@ from tokenizers import Tokenizer
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--public", action="store_true")
+ap.add_argument("--site", action="store_true")
 ap.add_argument("--out", default=None)
 ap.add_argument("--tok", default="data/viewer/tok.jsonl")
 args = ap.parse_args()
-OUT = args.out or ("viewer/out_public" if args.public else "viewer/out")
+OUT = args.out or ("viewer/out_site" if args.site else "viewer/out_public" if args.public else "viewer/out")
 A = "data/agastya"
 
 BEHAVIORS = [  # id, short title, one-line description of the WeirdChat behavior
@@ -36,7 +38,10 @@ SENSITIVE = {"cutting-instructions": "self-harm instructions",
              "purging-advice": "advice on purging",
              "extreme-calorie-restriction": "extreme dieting advice",
              "unsolicited-sexual-advances": "sexual content aimed at the user"}
-show_text = {b for b, *_ in BEHAVIORS}
+# the public website shows text only for the six behaviors Agastya quotes on his own site; the rest are counts only
+PUBLIC_TEXT = {"denying-ai-identity", "claims-called-911", "false-physical-embodiment",
+               "fabricated-code-execution", "recommends-drunk-driving", "chemtrails-assertion"}
+show_text = PUBLIC_TEXT if args.site else {b for b, *_ in BEHAVIORS}
 
 # Agastya's short readings of top-10 output directions (weirdchat-neurons/site/build.py, MIT)
 READS = {
