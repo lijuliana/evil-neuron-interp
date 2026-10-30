@@ -1,6 +1,6 @@
 """A2: adjudicate judge disputes. For transcripts where Haiku 5.5 (Transluce rubric) and the shipped
 WeirdChat (Gemma 4 31B) label disagree, re-judge with (a) Haiku at effort=high and (b) Sonnet 5.5
-(PROGRESS.md: "Sonnet 5.5 for calibration disputes"). Tells us whose call to trust and whether to run
+(PLAN.md standing decisions: Sonnet 5.5 for disputes). Tells us whose call to trust and whether to run
 production judging at a higher effort. API only.
   python -I scripts/25_a2_judge_disputes.py --n 60
 """

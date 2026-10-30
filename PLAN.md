@@ -10,6 +10,18 @@ of what the model "knows" before it goes weird, and a viewer to look at all of i
 Model: Qwen3.6-27B bf16 on GCP `weirdchat-a100` (A100-80GB). Judge: Haiku 5.5, Sonnet 5.5 on decisive cells,
 regex pre-screen first. GPU shared through `flock /data/gpu.lock`; idle watchers stop both boxes.
 
+## Standing decisions (approved by Juliana; moved here from PROGRESS.md on 2026-10-30)
+- Models: Qwen3.6-27B on GCP (primary), Qwen3.5-4B (secondary, AWS `weirdchat-4b` or local MLX).
+- GPU: A100-80GB on-demand, us-central1; up to ~$400 total without checking back. Stop and verify after every job.
+- Judge: Haiku 5.5 via ANTHROPIC_API_KEY in `.env` (gitignored), Sonnet 5.5 for disputes. Readout scoring capped at $100.
+- Behaviors: all 11 Qwen3.6-27B behaviors, including the self-harm family. Raw generations stay under `data/` or
+  `runs/` (gitignored). The public site shows the six non-sensitive behaviors only.
+- Output: blog/forum post. Findings as cards in `findings/`, `findings/REGISTRY.md`, a dated entry per job in
+  `findings/LOG.md` (the history of every phase lives there), commits per milestone.
+- Autonomy: fully autonomous within budget.
+- Links: living doc https://claude.ai/artifact/AHGGWnNe8u9Uj8znQrmC4e, viewer https://claude.ai/artifact/G9CW1GnmssXLBhb3aKWsfj,
+  public site https://lijuliana.github.io/evil-neuron-interp/
+
 ## What we already have
 | Asset | Where |
 |---|---|
