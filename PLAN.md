@@ -19,14 +19,14 @@ regex pre-screen first. GPU shared through `flock /data/gpu.lock`; idle watchers
 | Control lesson: random directions at dose 1.0 suppress F1 behaviors | runs/a3_matrix.png, findings/LOG.md |
 | Replicated levers (4B evil, sarcastiqwen, yes-man; 27B evil L34N3838) | findings/REGISTRY.md, runs/a4c_recipes/ |
 | J-lens / R-lens for 27B (camilablank/workspace-lenses) | VM /data/lenses |
-| O-lens + AR LoRAs (agu18dec/olens_and_ar), prompt and injection contract | HF model card |
+| O-lens loader for both olens_and_ar s3d (alpha 16000) and final_olens lens B (alpha 1000), no `global_workspace` | src/olens.py |
 
 ## Workstreams
 | # | Workstream | Output | Needs | Cost |
 |---|---|---|---|---|
 | W1 | **Viewer set.** Use Agastya's Stage A replies (403 prompts x 64, token IDs saved, `stage_a_gen.jsonl`); resample only if we cannot get them | per-reply token IDs + verdicts | his `stage_a_gen.jsonl`, `stage_a_judge_on.jsonl` | 0 (or ~1 GPU-h) |
 | W2 | **Forks: done by Agastya** (410 forks, 46 sharp Phase 2 forks, next-token decomposition). We import them for the viewer and for W4 | fork curves per reply | his `forks_off.jsonl`, `phase2_forks.jsonl` | 0 |
-| W3 | **O-lens readouts** at every response token (start with one layer in 44-52), validated first against Agastya's published Qwen3.6-27B readouts | per-token readout strings | his loader code or our reimplementation | ~1-2 GPU-h per layer |
+| W3 | **O-lens readouts** at every response token (start with one layer in 44-52), validated first against Agastya's published Qwen3.6-27B readouts | per-token readout strings | src/olens.py | ~1-2 GPU-h per layer |
 | W4 | **Do readouts predict badness?** Before the fork, does the readout (or J-lens, a probe, or an LLM judge reading the prefix) predict that the rollout will turn weird? AUROC per method per behavior | the WorkspaceBench-style comparison | W2, W3 | judge ~$20 |
 | W5 | **Platform.** v1 built (`viewer/`, scripts 50-52): his 410 fork replies + 373 contrast replies, tokens shaded by measured P(weird) or by how much his own/shared top-100 sets (vs matched random) support each token, fork decomposition, top-10 neuron activations. O-lens slot waiting on W3 | private artifact; `python -m http.server` in viewer/out | W1-W3 | ~0.3 GPU-h done |
 | W6 | **Beyond his sets.** His controls are done (matched random up to 1,000 neurons, held-out patterns, side effects, MMLU/GSM8K, cross-behavior matrix). Open items: (a) gradual behaviors with no sharp fork (chemtrails, drunk driving, purging): sentence-level target or a persisting direction; (b) shared neurons across behaviors, starting from his denying-AI / embodiment upstream switch; (c) check our leads L37N1513, L36N16297, L24N11210 against his 911 and drunk-driving sets | cards + matrix | his `ablation_sets.json`, `upstream_sets.json` | ~3 GPU-h |
@@ -40,7 +40,8 @@ Agastya's write-up (WeirdChat Neurons in Qwen3.6-27B, Oct 28) is the reference f
 Defaults in brackets. Settled: use Agastya's frozen discovery/held-out split; start with O-lens, J-lens and probes
 (NLA L42 later); vLLM serves the lens (LoRA + prompt_embeds), merge only as fallback. Lens checkpoint: validate
 olens_and_ar (alpha 16000) and final_olens lensB (alpha 1000, public loader) on 20 activations against his saved
-layer-56 readouts before any bulk run.
+layer-56 readouts before any bulk run. His viewer used olens_s3d_rl600 at block 56 output, one sample per token,
+temperature 0.8, top-p 0.95, cap 256 (src/olens.py's s3d defaults), so s3d is the like-for-like check and lens B the challenger.
 
 1. **Target.** What the readout must predict: final verdict of the reply (lots of data, but early positions are
    coin flips), propensity P(weird | prefix) at his measured cut points (what the state could know; ~4k points), or

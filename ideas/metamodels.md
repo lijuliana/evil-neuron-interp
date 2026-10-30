@@ -40,7 +40,7 @@ read with it enabled.
 | Reader | Repo | Layers | Quality | Load path | Notes |
 |---|---|---|---|---|---|
 | **Oracle Lens, any layer** | `agu18dec/final_olens` (updated today) | all 64 | WorkspaceBench 0.683 at RL step 600; step 300 (0.673) hallucinates less | `olens_lensB.py` in the repo, needs only transformers, peft, safetensors | **First choice.** Self-contained loader resolves the `global_workspace` dependency. Matched AR included (another 60 GB; load sequentially). |
-| Oracle Lens, WorkspaceBench reference | `agu18dec/olens_and_ar`, mirrored at `neuronpedia/jacobian-lens:qwen3.6-27b/oracle` | 20 to 60 step 4 | WorkspaceBench 0.726 (4 bullets) | needs `global_workspace` package (not public) | Highest score but the loader is private. Injection contract: unit vector x 16000 at token 158983. |
+| Oracle Lens, WorkspaceBench reference | `agu18dec/olens_and_ar`, mirrored at `neuronpedia/jacobian-lens:qwen3.6-27b/oracle` | 20 to 60 step 4 | WorkspaceBench 0.726 (4 bullets) | `src/olens.py` (ours; the card's code needs the private `global_workspace`) | Highest score. Standard PEFT adapter, same prompt and marker as lens B; injection contract unit vector x 16000 at token 158983. |
 | Oracle Lens, layer 42, with reconstructor and inverter | `ceselder/olens-qwen3.6-27b-l42` | 42 | FVE 0.41 | `olens_usage.py`, self-contained, 60 GB | Ships `verbalize`, `reconstruct`, `invert`. The inverter is a free Patchscopes-style baseline. |
 | **Activation Oracle (question answering)** | `adamkarvonen/checkpoints_latentqa_cls_past_lens_addition_Qwen3.6-27B` (official); `EvilScript/activation-oracle-Qwen3_6-27B` (same recipe, MIT) | 16, 32, 48 | classification 0.86 to 0.99; untrained base already 0.72 to 0.93 | `activation_oracles` repo, main branch | Only reader that takes a free-form question ("Will the assistant claim to be human?"). Calibration code at `federicotorrielli/probabilistic_activation_oracles` has a qwen3.6-27b preset. |
 | **NLA, layer 42** (the WorkspaceBench NLA) | `ceselder/qwen3.6-27b-nla-rl` (checkpoints every 100 RL steps) or `ceselder/qwen3.6-27b-nla-L42` (SFT LoRA + RL LoRA on raw base, Apache-2.0) | 42 | FVE 0.75 to 0.78 | EasyNLA (`asherps/EasyNLA`) | `nla-rl` attaches to a merged 54 GB warm-start copy, which does not fit beside the base on one A100. Use `nla-L42`, which stacks two LoRAs on the raw base. |
@@ -105,8 +105,9 @@ is itself a usable text-to-vector map (variance explained 0.12 at layer 20, risi
   is a silent error.
 - **Cost.** About 6 s per 32 readouts. All 403 prompts at 11 layers is about 15 minutes.
 - **Caveat, resolved.** The model card's code imports a `global_workspace` package that is not public.
-  `agu18dec/final_olens` is the same lineage with a self-contained loader and reads any of the 64 layers,
-  so use that one. Its injection scale is 1000, not 16000; take each repo's contract whole.
+  `src/olens.py` loads it anyway (2026-10-30): it is a plain PEFT adapter with final_olens's prompt and
+  marker, so only alpha (16000 vs 1000), layers and sampling differ; WorkspaceBench's public `OLens` class
+  (camilablank/workspace-bench, `src/wsbench/produce/methods.py`) reads it the same way. Take each contract whole.
 
 ### 1.4 Activation Oracles (LatentQA line)
 
