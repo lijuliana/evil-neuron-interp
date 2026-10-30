@@ -30,6 +30,7 @@ work = []  # (key, layer, vector)
 for (L, n, src), w in zip(d["nkeys"], d["W"]):
     for sign in (1, -1):
         work.append((f"N|{L}|{n}|{src}|{sign:+d}", read_layer(L), sign * w))
+work.sort(key=lambda w: w[1])  # one read layer per generate call, so group the neurons by layer
 for j in reversed(range(len(d["layers"]))):
     for (sid, cc), h in zip(d["keys"], d["H"][:, j]):
         work.append((f"R|{sid}|{cc}|{d['layers'][j]}", d["layers"][j], h))
