@@ -45,7 +45,8 @@ for l in open(args.reads):
     r = json.loads(l)
     k = r["key"]
     if k.startswith("R|"):
-        b = beh[k.split("|", 1)[1].rsplit("|", 2)[0]]
+        sid = k.split("|", 1)[1].rsplit("|", 2)[0]
+        b = beh.get(sid) or beh["reply|" + sid.split("|", 1)[1]]  # scripts/90 pool keys: R|<condition>|<rid>|c|L
     else:
         src = k.split("|")[3:-1]
         b = src[-1] if src[-1] in DESC else "any"
