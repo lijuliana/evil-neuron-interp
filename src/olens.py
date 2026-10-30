@@ -145,10 +145,19 @@ def _blocks(model: nn.Module) -> nn.ModuleList:
     raise ValueError("no decoder layers found")
 
 
+def merge(lens: Lens) -> Lens:
+    """Fold the LoRA into the bf16 base weights for faster generation (the s3d card merges to read ~4x
+    faster). A merged lens can only read: capture every residual first."""
+    lens.lm = lens.lm.merge_and_unload()
+    return lens
+
+
 @torch.no_grad()
 def capture(lens: Lens, ids: list[int], layers: list[int], positions: list[int]) -> dict[int, torch.Tensor]:
     """Base-model residuals (block outputs, adapter off) at ``positions`` of one token sequence:
     {layer: [n_pos, 5120]} fp32 on CPU."""
+    if not isinstance(lens.lm, PeftModel):
+        raise RuntimeError("merged lens: capture before merge()")
     out: dict[int, torch.Tensor] = {}
     blocks, pos = _blocks(lens.lm), torch.tensor(positions)
 
