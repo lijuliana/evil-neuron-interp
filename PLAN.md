@@ -53,7 +53,9 @@ Defaults in brackets. Settled: use Agastya's frozen discovery/held-out split; st
 (NLA L42 later); vLLM serves the lens (LoRA + prompt_embeds), merge only as fallback. Lens checkpoint: validate
 olens_and_ar (alpha 16000) and final_olens lensB (alpha 1000, public loader) on 20 activations against his saved
 layer-56 readouts before any bulk run. His viewer used olens_s3d_rl600 at block 56 output, one sample per token,
-temperature 0.8, top-p 0.95, cap 256 (src/olens.py's s3d defaults), so s3d is the like-for-like check and lens B the challenger.
+temperature 0.8, top-p 0.95, top-k 0, cap 256 (src/olens.py's s3d defaults), so s3d is the like-for-like check and lens B the
+challenger. His carrier is the card's hard-wrapped prompt (src/olens.py PROMPT_WRAPPED), not the single-line training one.
+Validation set: his public refusal viewer data (data/qwen36 on his site: 3,063 replies with exact token IDs, 559k block-56 readouts).
 
 1. **Target.** What the readout must predict: final verdict of the reply (lots of data, but early positions are
    coin flips), propensity P(weird | prefix) at his measured cut points (what the state could know; ~4k points), or

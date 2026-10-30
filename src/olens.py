@@ -23,9 +23,12 @@ Conventions (both lenses):
 - Load the base with AutoModelForCausalLM (blocks at model.layers.N), as both adapters were saved. On
   harness.py's ForConditionalGeneration wrapper (model.language_model.layers.N) the keys match nothing.
   load_lens raises if any LoRA B matrix is missing or still zero after loading.
-- Sampling defaults: s3d uses Agastya's viewer setting (temperature 0.8, top-p 0.95, cap 256), the
-  baseline we validate against; lens B uses its card's (temperature 1, top-p 1, cap 128). top_k is
+- Sampling defaults: s3d uses Agastya's viewer protocol (temperature 0.8, top-p 0.95, top-k 0, cap 256),
+  the baseline we validate against; lens B uses its card's (temperature 1, top-p 1, cap 128). top_k is
   always 0 so the checkpoint's generation_config top_k=20 never applies.
+- PROMPT is the single-line carrier that final_olens, WorkspaceBench's OLens and Neuronpedia's lens configs
+  use. Agastya's viewer copied the s3d card's hard-wrapped version (PROMPT_WRAPPED: two spaces become
+  newlines, 58 tokens instead of 56); pass prompt=PROMPT_WRAPPED only to reproduce his readouts.
 
 Pins (separate env from the steering harness): torch 2.9.1, transformers 5.11.0, peft 0.19.1,
 flash-linear-attention 0.5.1. Needs ~60 GB of GPU memory.
@@ -52,6 +55,7 @@ PROMPT = (
     "tags: <activation>㈜</activation>. Produce distinct concepts that encode this activation, "
     "each as a '- ' bullet on its own line."
 )
+PROMPT_WRAPPED = PROMPT.replace(" <activation>", "\n<activation>").replace(" a '- '", "\na '- '")
 
 
 @dataclass(frozen=True)
@@ -173,8 +177,8 @@ def residual(lens: Lens, user_text: str, layer: int, position: int = -1,
     return capture(lens, ids, [layer], [position % len(ids)])[layer][0]
 
 
-def _prompt(lens: Lens, layer: int) -> tuple[list[int], int]:
-    text = lens.tok.apply_chat_template([{"role": "user", "content": PROMPT.format(layer=layer)}],
+def _prompt(lens: Lens, layer: int, prompt: str = PROMPT) -> tuple[list[int], int]:
+    text = lens.tok.apply_chat_template([{"role": "user", "content": prompt.format(layer=layer)}],
                                         tokenize=False, add_generation_prompt=True, enable_thinking=False)
     ids = lens.tok(text, add_special_tokens=False).input_ids
     slots = [i for i, t in enumerate(ids) if t == SLOT_ID]
@@ -186,7 +190,7 @@ def _prompt(lens: Lens, layer: int) -> tuple[list[int], int]:
 @torch.no_grad()
 def read(lens: Lens, h: torch.Tensor, layer: int, n: int = 1, temperature: float | None = None,
          top_p: float | None = None, max_new: int | None = None, seed: int | None = None,
-         off_contract: bool = False) -> list[str] | list[list[str]]:
+         off_contract: bool = False, prompt: str = PROMPT) -> list[str] | list[list[str]]:
     """``n`` readouts of residual ``h`` taken at ``layer``. ``h`` is [5120] (returns n strings, as
     final_olens) or [k, 5120] (returns k lists of n, one batched generate)."""
     c = lens.contract
@@ -197,7 +201,7 @@ def read(lens: Lens, h: torch.Tensor, layer: int, n: int = 1, temperature: float
     if seed is not None:
         torch.manual_seed(seed)
     hs = h.float().reshape(-1, D_MODEL)
-    ids, slot = _prompt(lens, layer)
+    ids, slot = _prompt(lens, layer, prompt)
     ids = torch.tensor([ids], device=lens.lm.device).repeat(len(hs) * n, 1)
     emb = lens.lm.get_input_embeddings()(ids)
     unit = hs / hs.norm(dim=-1, keepdim=True).clamp_min(1e-9)
