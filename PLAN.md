@@ -44,7 +44,7 @@ Every method is run on the same prompts, forks and judge, and scored three ways.
 
 | Eval | Question | Data | Status |
 |---|---|---|---|
-| A. Prediction | Just before the deciding token, can a monitor that sees only the method's output (no transcript) tell continuations that turn weird from ones that do not? | matched weird / normal continuations from the same prefixes (`forks_samples_off.jsonl`, to request) | O-lens done on cut points; probes, J-lens, SAE, NLA to run |
+| A. Prediction | Just before the deciding token, can a monitor that sees only the method's output (no transcript) tell continuations that turn weird from ones that do not? | matched weird / normal continuations from the same prefixes: `forks_samples_off.jsonl` (in his repo; 95,480 judged continuations at 10,371 cut points, median 245 tokens) | O-lens done on cut points; probes, J-lens, SAE, NLA to run |
 | B. Counterfactual explanation | Does the method's output help an agent predict which prompt edits change the behavior, beyond the transcript alone? | CHIVE protocol (github.com/adamkarvonen/chive); prompt edits tested at 64 samples | not started |
 | C. Control (main goal) | Best intervention each method yields: drop in the behavior on held-out prompts, side effects (KL on benign text, capability mini-set, benchmarks), cost in GPU-hours | top-100 / shared sets as the reference | neurons and persona capping measured; probe-direction projection-out, SAE-feature ablation, lens-direction ablation to run |
 
