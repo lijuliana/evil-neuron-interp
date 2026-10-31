@@ -13,13 +13,17 @@ const MODES = [
   { id: 'shared100', label: 'Shared mid-100 ablation: −Δlog p', set: 'shared100' },
   { id: 'shared100_rand', label: 'Random-100 control (shared): −Δlog p', set: 'shared100_rand' },
   { id: 'pw', label: 'P(weird | prefix), resampled' },
+  { id: 'tj', label: 'Text judge: P(weird) from the transcript' },
+  { id: 'olens', label: 'O-lens: behavior score (layer 56)' },
+  { id: 'axis', label: 'Assistant Axis: below the cap threshold' },
   { id: 'kl', label: 'KL(clean ‖ ablated), next token' },
   { id: 'surprise', label: 'Surprisal (−log p)' },
   { id: 'none', label: 'No highlight' },
 ];
 // peak shading per mode: the P(weird) wash covers whole spans, so it stays light; set support is sparse, so it can be strong
-const INTENSITY = { pw: 0.3, kl: 0.5, surprise: 0.45, set: 0.62 };
-const state = { index: null, b: null, file: null, doc: null, rep: null, j: 0, mode: null, view: 'tokens', geom: null, revealed: new Set() };
+const INTENSITY = { pw: 0.3, kl: 0.5, surprise: 0.45, set: 0.62, olens: 0.55, axis: 0.5 };
+const LAYERS = [32, 44, 56];
+const state = { index: null, b: null, file: null, doc: null, rep: null, j: 0, mode: null, view: 'tokens', geom: null, revealed: new Set(), lensL: 56 };
 try { if (localStorage.getItem('wcf-view') === 'text') state.view = 'text'; } catch {}
 const docs = new Map();
 
@@ -37,10 +41,18 @@ function pwAt(rep, j) {
   for (const [c, P, n] of rep.curve) if (c <= j + 1) best = { c, P, n, measured: c === j + 1 };
   return best;
 }
+// O-lens cells are keyed by cut c (reply tokens written); the state at viewer token j is cut j + 1
+const cellAt = (rep, kind, j) => rep.o?.[kind]?.[j + 1] || null;
+const mean = xs => xs && xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+const lensScore = (rep, j, L = 56, kind = 'lens') => mean(cellAt(rep, kind, j)?.[L]?.[1]);
+const axisAt = (rep, j) => rep.o?.ax ? rep.o.ax[j + 1] / state.index.axis.scale : null;
 function mainSet(rep) { return rep.sets?.own100 ? 'own100' : rep.sets?.shared100 ? 'shared100' : null; }
 function defaultMode(rep) { return mainSet(rep) || (rep.curve ? 'pw' : 'none'); }
 function modeValue(rep, j, mode) {
   if (mode === 'pw') { const p = pwAt(rep, j); return p ? { v: p.P * INTENSITY.pw, hl: '--hot' } : null; }
+  if (mode === 'tj') { const p = rep.o?.tj?.[j + 1]; return p == null ? null : { v: p * INTENSITY.pw, hl: '--hot' }; }
+  if (mode === 'olens') { const v = lensScore(rep, j); return v == null ? null : { v: v / 10 * INTENSITY.olens, hl: '--accent' }; }
+  if (mode === 'axis') { const a = axisAt(rep, j); return a == null ? null : { v: Math.max(0, Math.min(1, (state.index.axis.tau - a) / 12)) * INTENSITY.axis, hl: '--cool' }; }
   if (mode === 'surprise') return rep.lp ? { v: Math.min(1, -rep.lp[j] / 8) * INTENSITY.surprise, hl: '--cool' } : null;
   if (mode === 'kl') { const s = mainSet(rep); return s ? { v: Math.min(1, rep.sets[s].kl[j] / 2) * INTENSITY.kl, hl: '--accent' } : null; }
   const s = rep.sets?.[mode];
@@ -51,6 +63,9 @@ function modeValue(rep, j, mode) {
 function modeAvailable(rep, mode) {
   if (mode === 'none') return true;
   if (mode === 'pw') return !!rep.curve;
+  if (mode === 'tj') return !!rep.o?.tj;
+  if (mode === 'olens') return !!rep.o?.lens;
+  if (mode === 'axis') return !!rep.o?.ax;
   if (mode === 'surprise') return !!rep.lp;
   if (mode === 'kl') return !!mainSet(rep);
   return !!rep.sets?.[mode];
@@ -59,6 +74,9 @@ const sw = (c, txt) => `<span><i class="sw" style="background:var(${c})"></i>${t
 function legendFor(mode) {
   if (mode === 'pw') return sw('--hot', 'P(weird | prefix through this token)');
   if (mode === 'surprise') return sw('--cool', 'surprisal, saturates at 8 nats');
+  if (mode === 'tj') return sw('--hot', 'text judge estimate after this token (read positions only)');
+  if (mode === 'olens') return sw('--accent', 'O-lens behavior score at layer 56, 0 to 10 (read positions only)');
+  if (mode === 'axis') return sw('--cool', 'how far the state sits below the Assistant Axis cap threshold (block 48)');
   if (mode === 'kl') return sw('--accent', 'KL(clean ‖ ablated), saturates at 2 nats');
   if (mode === 'none') return '';
   return sw('--hot', '−Δlog p > 0: ablation lowers the token') + sw('--cool', '< 0: ablation raises it') + '<span>saturates at 4 nats</span>';
@@ -70,8 +88,10 @@ function renderTabs() {
   const tab = b => `<button type="button" class="tab${b.id === state.b ? ' active' : ''}" data-b="${b.id}" aria-pressed="${b.id === state.b}">${esc(b.title)}<small>${b.forks}</small></button>`;
   const shown = bs.filter(b => b.text), cw = shown.filter(b => b.cw);
   $('tabs').innerHTML = shown.filter(b => !b.cw).map(tab).join('') +
-    (cw.length ? `<span class="tab-sep" title="Opens behind a content warning">Content warning</span>${cw.map(tab).join('')}` : '');
+    (cw.length ? `<span class="tab-sep" title="Opens behind a content warning">Content warning</span>${cw.map(tab).join('')}` : '') +
+    `<span class="tab-sep methods-sep"></span><button type="button" class="tab${state.b === METHODS ? ' active' : ''}" data-m="1" aria-pressed="${state.b === METHODS}">Compare methods</button>`;
   document.querySelectorAll('.tab[data-b]').forEach(t => t.onclick = () => selectBehavior(t.dataset.b).catch(showError));
+  document.querySelector('.tab[data-m]').onclick = showMethods;
   const hidden = bs.filter(b => !b.text);
   $('counts-only').hidden = !hidden.length;
   $('counts-only').textContent = hidden.length ? `Counts only in this build: ${hidden.map(b => `${b.title} (${b.forks} forks)`).join(', ')}.` : '';
@@ -101,10 +121,17 @@ function renderBehavior(b) {
   $('beh').innerHTML = `<div><h2>${esc(b.title)}<span class="info" tabindex="0" role="button" aria-label="Counts for this behavior">i<span class="pop" role="tooltip">${pop}</span></span></h2><p class="desc">${esc(b.desc)}</p></div>`;
   $('rates').innerHTML = right;
 }
+const METHODS = '__methods';
+function showMethods() {
+  state.b = METHODS; renderTabs();
+  $('bench').hidden = true; $('compare').hidden = false;
+  history.replaceState(null, '', '#methods');
+}
 function maxJump(p) { return Math.max(-1, ...p.replies.filter(r => r.kind === 'fork').map(r => r.jump ?? 0)); }
 
 async function selectBehavior(bid, file = null, i = null, j = null) {
   state.b = bid;
+  $('bench').hidden = false; $('compare').hidden = true;
   const b = state.index.behaviors.find(x => x.id === bid);
   renderTabs(); renderBehavior(b);
   const gated = b.cw && !state.revealed.has(bid);
@@ -136,11 +163,20 @@ function unscale(doc) {
 }
 async function selectPrompt(file, i = null, j = null) {
   state.file = file; $('prompt-select').value = file;
-  if (!docs.has(file)) docs.set(file, unscale(await getJSON(`p/${file}.json`)));
+  if (!docs.has(file)) {
+    const entry = state.index.prompts.find(p => p.file === file);
+    const [d, o] = await Promise.all([getJSON(`p/${file}.json`), entry?.o ? getJSON(`o/${file}.json`).catch(() => null) : null]);
+    unscale(d);
+    if (o) { d.o = o; for (const r of d.replies) r.o = o.r?.[r.i] || null; }
+    docs.set(file, d);
+  }
   const doc = state.doc = docs.get(file);
   $('chat').innerHTML = doc.chat.map(t => `<div class="turn ${esc(t.role)}"><span class="role">${esc(t.role)}</span><div class="bubble">${esc(t.text)}</div></div>`).join('');
   $('chat').scrollTop = $('chat').scrollHeight;
   $('prompt-meta').textContent = `${doc.k ?? '–'} of ${doc.n ?? '–'} sampled replies judged weird · ${doc.split} split · pattern ${doc.pattern} · thinking off, temperature 1`;
+  const pl = doc.o?.prompt;
+  $('prompt-lens').hidden = !pl;
+  if (pl) $('prompt-lens').innerHTML = `<summary>O-lens at the last prompt token, before any reply${doc.o.tj0 != null ? ` · text judge ${pct(doc.o.tj0)}` : ''}</summary>${lensCells(pl)}`;
   $('reply-select').innerHTML = doc.replies.map(r => {
     const w = r.off?.match ? 'weird' : 'normal';
     const f = r.fork ? ` · fork at “${vis(r.fork.tok)}”, ${pct(r.fork.P0)}→${pct(r.fork.P1)}` : ' · no fork';
@@ -171,7 +207,7 @@ function renderTokens(mode) {
   const rep = state.rep, box = $('reply'), chips = state.view === 'tokens';
   box.replaceChildren();
   box.classList.toggle('chips', chips);
-  for (const b of document.querySelectorAll('.seg button')) b.setAttribute('aria-pressed', b.dataset.view === state.view);
+  for (const b of document.querySelectorAll('.seg button[data-view]')) b.setAttribute('aria-pressed', b.dataset.view === state.view);
   const cuts = new Set((rep.curve || []).map(([c]) => c - 1));
   const frag = document.createDocumentFragment();
   rep.t.forEach((t, j) => {
@@ -239,7 +275,11 @@ function renderChart() {
   // two lanes with room for their titles, token ticks, then the whole-reply track
   const top = 26, h1 = 52, y1 = P => top + (1 - P) * h1;
   const amp = 24, clip = 8, mid = top + h1 + 34 + amp;
-  const axisY = (set ? mid + amp : top + h1) + 8, mmTop = axisY + 33, mmH = 10;
+  let yb0 = set ? mid + amp : top + h1;
+  const hasLens = !!rep.o?.lens, hasAx = !!rep.o?.ax, hL = 44, hA = 44;
+  const lensTop = yb0 + 34; if (hasLens) yb0 = lensTop + hL;
+  const axTop = yb0 + 34; if (hasAx) yb0 = axTop + hA;
+  const axisY = yb0 + 8, mmTop = axisY + 33, mmH = 10;
   const H = windowed ? mmTop + mmH + 4 : axisY + 20;
   state.geom = { L, PW, slot, w0, size, axisY, mmTop, mmH, windowed, R };
   const hot = css('--hot'), cool = css('--cool'), ctrl = css('--ctrl'), rule = css('--rule-2'), acc = css('--accent'), faint = css('--faint');
@@ -256,6 +296,11 @@ function renderChart() {
     d += `H${x(R)}`;
     body += `<path d="${d}" fill="none" stroke="${hot}" stroke-width="2" stroke-linejoin="round"/>`;
     for (const [c, P, n] of rep.curve) if (c >= w0 && c <= w0 + size) body += `<circle cx="${x(c)}" cy="${y1(P)}" r="3.5" fill="${hot}" stroke="${sheet}" stroke-width="1.5"><title>after ${c} tokens: ${pct(P)} weird (${n ?? '?'} judged continuations)</title></circle>`;
+    if (rep.o?.tj) {
+      const pts = Object.entries(rep.o.tj).map(([c, p]) => [Number(c), p]).sort((a, b) => a[0] - b[0]);
+      body += `<path d="${pts.map(([c, p], k) => `${k ? 'L' : 'M'}${x(c)},${y1(p)}`).join('')}" fill="none" stroke="${ctrl}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+      for (const [c, p] of pts) if (c >= w0 && c <= w0 + size) body += `<circle cx="${x(c)}" cy="${y1(p)}" r="2.3" fill="${ctrl}"><title>after ${c} tokens: text judge ${pct(p)}</title></circle>`;
+    }
     const fc = rep.fork?.c0;
     if (fc != null && fc >= w0 && fc < w0 + size) {
       const fx = x(fc + 0.5), right = fx < W - 60;
@@ -285,6 +330,32 @@ function renderChart() {
   } else {
     $('chart-legend').innerHTML = sw('--hot', 'P(weird | prefix)');
   }
+  if (rep.o?.tj) $('chart-legend').innerHTML += sw('--ctrl', 'text judge');
+  if (hasLens) $('chart-legend').innerHTML += sw('--accent', 'O-lens') + sw('--faint', 'plain document') + sw('--cool', 'top-100 zeroed');
+  if (hasAx) $('chart-legend').innerHTML += sw('--ok', 'cap threshold');
+  if (hasLens) {
+    const yl = v => lensTop + (1 - v / 10) * hL;
+    titles += `<text class="lane" x="${L}" y="${lensTop - 14}">O-lens behavior score, layer 56 (0 to 10)</text>`;
+    for (const v of [0, 5, 10]) g += `<line x1="${L}" x2="${W - Rm}" y1="${yl(v)}" y2="${yl(v)}" stroke="${rule}" stroke-dasharray="${v === 5 ? '2 4' : ''}"/><text x="${L - 8}" y="${yl(v) + 4}" text-anchor="end">${v}</text>`;
+    const series = (kind, col, dash, dots) => {
+      const pts = Object.entries(rep.o[kind] || {}).map(([c, cell]) => [Number(c), mean(cell[56]?.[1])]).filter(([, v]) => v != null).sort((a, b) => a[0] - b[0]);
+      let out = '', d = '';
+      pts.forEach(([c, v], k) => { const gap = k && c - pts[k - 1][0] > 1; d += `${!k || gap ? 'M' : 'L'}${x(c)},${yl(v)}`; });
+      if (!dots) out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.5" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`;
+      for (const [c, v] of pts) if (c >= w0 && c <= w0 + size) out += `<circle cx="${x(c)}" cy="${yl(v)}" r="${dots ? 2.6 : 2.2}" fill="${col}"><title>after ${c} tokens: ${kind === 'lens' ? 'O-lens' : kind === 'raw' ? 'plain document' : kind === 'top' ? 'own top-100 zeroed' : 'random-100 zeroed'} ${v.toFixed(1)}</title></circle>`;
+      return out;
+    };
+    body += series('raw', faint, '3 3', false) + series('lens', acc, '', false) + series('rand', ctrl, '', true) + series('top', cool, '', true);
+  }
+  if (hasAx) {
+    const A = state.index.axis, lo = -12, hi = 18, ya = v => axTop + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * hA;
+    titles += `<text class="lane" x="${L}" y="${axTop - 14}">Assistant Axis projection, block ${A.block}</text>`;
+    g += `<line x1="${L}" x2="${W - Rm}" y1="${ya(A.tau)}" y2="${ya(A.tau)}" stroke="${css('--ok')}" stroke-dasharray="4 3"/><text x="${L - 8}" y="${ya(A.tau) + 4}" text-anchor="end">cap</text>`;
+    g += `<line x1="${L}" x2="${W - Rm}" y1="${ya(0)}" y2="${ya(0)}" stroke="${rule}"/><text x="${L - 8}" y="${ya(0) + 4}" text-anchor="end">0</text>`;
+    let d = '';
+    for (let k = Math.max(0, w0 - 1); k < Math.min(R, w0 + size + 1); k++) d += `${d ? 'L' : 'M'}${x(k + 0.5)},${ya(axisAt(rep, k))}`;
+    body += `<path d="${d}" fill="none" stroke="${cool}" stroke-width="1.5" stroke-linejoin="round"/>`;
+  }
   g += `<g clip-path="url(#pclip)">${body}</g>` + titles;
   // token ticks along the window, numbered from 1 like the inspector
   const step = [1, 2, 5, 10, 20, 50, 100].find(s => size / s <= 12);
@@ -294,7 +365,8 @@ function renderChart() {
   }
   // hover titles per token
   for (let k = w0; k < w0 + size; k++) {
-    const sup = set ? ` · −Δlog p ${(-rep.sets[set].dlp[k]).toFixed(2)}` : '';
+    const ls = lensScore(rep, k), av = axisAt(rep, k);
+    const sup = (set ? ` · −Δlog p ${(-rep.sets[set].dlp[k]).toFixed(2)}` : '') + (ls != null ? ` · O-lens ${ls.toFixed(1)}` : '') + (av != null ? ` · axis ${av.toFixed(1)}` : '');
     g += `<rect x="${x(k)}" y="${top - 8}" width="${slot}" height="${axisY - top + 8}" fill="${sheet}" fill-opacity="0"><title>token ${k + 1}: ${esc(vis(rep.t[k]))}${sup}</title></rect>`;
   }
   if (windowed) {
@@ -390,6 +462,7 @@ function selectToken(j, scroll = false) {
       ${nxt.map(n => `<tr class="${n.tok === rep.ids[j] ? 'here' : ''}"><td class="tk">${esc(vis(n.s))}</td><td>${prob(n.p)}</td><td>${pct(n.q)}</td><td>${n.n}</td></tr>`).join('')}
       </tbody></table><p class="note">${extra.join(' ')}</p></section>`);
   }
+  out.push(readoutSection(rep, j));
   if (rep.top) {
     const [ids, ps] = rep.top[j];
     const rows = ids.map((id, k) => [vis(state.doc.vocab[id] ?? `#${id}`), ps[k], ps[k] === 0 ? '<0.1%' : prob(ps[k]), id === rep.ids[j]]);
@@ -412,17 +485,48 @@ function selectToken(j, scroll = false) {
     out.push(`<section class="sec"><h4>Own top-10 activations (down_proj input)</h4><div class="rows">${rows}</div>
       <p class="note">Bars are normalized to each neuron's max |activation| in this reply. Labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative.</p></section>`);
   }
-  out.push(`<section class="sec foot"><b>Oracle-lens readout:</b> not computed yet. It will appear here once the lens rebuild is checked against the saved readouts.</section>`);
   $('inspector').innerHTML = out.join('');
   $('copy-link').onclick = async () => {
     try { await navigator.clipboard.writeText(location.href); $('copy-status').textContent = 'Copied'; }
     catch { $('copy-status').textContent = location.href; }
   };
   if ($('go-fork')) $('go-fork').onclick = () => selectToken(F.c0, true);
+  if ($('go-read')) $('go-read').onclick = () => selectToken(Number($('go-read').dataset.j), true);
+  document.querySelectorAll('#lens-layers button').forEach(b => b.onclick = () => { state.lensL = Number(b.dataset.l); selectToken(state.j); });
+}
+
+// ------------------------------------------------------------------ O-lens and Assistant Axis readouts
+function lensCells(cellByL, L = state.lensL) {
+  const cell = cellByL?.[L];
+  if (!cell) return '<p class="note">Not read at this layer.</p>';
+  const [texts, b, w] = cell;
+  return texts.map((t, k) => `<div class="rd"><div class="rd-meta"><span>readout ${k + 1}</span><span>behavior <b>${b[k] ?? '–'}</b>/10 · out of role <b>${w[k] ?? '–'}</b>/10</span></div><div class="rd-text">${esc(t)}</div></div>`).join('');
+}
+function readoutSection(rep, j) {
+  if (!rep.o) return '';
+  const out = [], A = state.index.axis, av = axisAt(rep, j), tj = rep.o.tj?.[j + 1];
+  if (av != null) {
+    const below = av < A.tau;
+    out.push(`<div class="kv kv2"><div><label>Assistant Axis, block ${A.block}</label><b>${av.toFixed(1)}</b><span>${below ? `below the cap threshold (${A.tau}); capping would push it up by ${(A.tau - av).toFixed(1)}` : `above the cap threshold (${A.tau}); capping leaves it alone`}. Benign chat averages ${A.mu}.</span></div>
+      <div><label>Text judge</label><b>${tj == null ? '–' : pct(tj)}</b><span>${tj == null ? 'not asked at this token' : 'reads only the transcript up to here'}</span></div></div>`);
+  }
+  const chat = cellAt(rep, 'lens', j);
+  const seg = `<div class="seg" role="group" aria-label="O-lens layer" id="lens-layers">${LAYERS.map(L => `<button type="button" data-l="${L}" aria-pressed="${L === state.lensL}">L${L}</button>`).join('')}</div>`;
+  if (chat) {
+    const extra = [['raw', 'Same words read as a plain document (no chat template)'], ['top', 'Own top-100 zeroed, same tokens'], ['rand', 'Random-100 zeroed, same tokens']]
+      .map(([k, lab]) => cellAt(rep, k, j) ? `<h5>${lab}</h5>${lensCells(cellAt(rep, k, j))}` : '').join('');
+    out.push(`<div class="rd-head"><span>State after this token, read by the O-lens</span>${seg}</div>${lensCells(chat)}${extra}`);
+  } else {
+    const cs = Object.keys(rep.o.lens || {}).map(Number);
+    const near = cs.length ? cs.reduce((a, c) => Math.abs(c - 1 - j) < Math.abs(a - 1 - j) ? c : a) - 1 : null;
+    out.push(`<p class="note">No O-lens readout at this token. Readouts exist at the measured cuts (dotted underlines) and at every token from 40 before to 20 after a sharp fork.${near != null ? ` <button type="button" class="linkbtn" id="go-read" data-j="${near}">Nearest readout: token ${near + 1}</button>` : ''}</p>`);
+  }
+  return `<section class="sec"><h4>Readouts</h4>${out.join('')}</section>`;
 }
 
 // ------------------------------------------------------------------ boot
 function openHash() {
+  if (location.hash === '#methods') { showMethods(); return; }
   const m = /^#([0-9a-f]{16})\.(\d+)(?:\.(\d+))?$/.exec(location.hash);
   if (m) {
     const p = state.index.prompts.find(x => x.file === m[1]);
@@ -435,12 +539,12 @@ async function init() {
   state.index = await getJSON('index.json');
   $('mode-select').onchange = () => applyMode($('mode-select').value);
   bindChart();
-  for (const b of document.querySelectorAll('.seg button')) b.onclick = () => {
+  for (const b of document.querySelectorAll('.seg button[data-view]')) b.onclick = () => {
     state.view = b.dataset.view;
     try { localStorage.setItem('wcf-view', state.view); } catch {}
     if (state.rep) { renderTokens(state.mode); selectToken(state.j); }
   };
-  $('source-line').textContent = `Data: ${state.index.source}. Built ${state.index.built}. Per-token neuron data from our own forward passes on an A100.`;
+  $('source-line').textContent = `Data: ${state.index.source}. Built ${state.index.built}. Per-token neuron data from our own forward passes on an A100; O-lens readouts (agu18dec/olens_and_ar, s3d_rl600) and Assistant Axis projections from our own runs.`;
   let t;
   window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => state.rep && renderChart(), 120); });
   await openHash();

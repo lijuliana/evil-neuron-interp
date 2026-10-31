@@ -7,6 +7,9 @@
 Writes <out>/index.json and <out>/p/<pid>.json (one file per prompt with its fork and contrast replies),
 plus index.html (doctype wrapper, for `python -m http.server`) and page.html (fragment, for publishing).
 Sources: data/viewer/items.jsonl (scripts/50), data/agastya/*, data/viewer/tok.jsonl (scripts/51, optional).
+Also writes <out>/o/<pid>.json when runs/olens exists: O-lens readouts (scripts/83-90) at every read position of each fork
+reply (chat, plain-document re-read, own top-100 / random-100 ablated), the text judge's estimate there, the last prompt
+token's readouts, and the per-token Assistant Axis projection at block 48 (runs/persona_p1, scripts/70).
 """
 import argparse, codecs, collections, json, os, re, shutil
 from tokenizers import Tokenizer
@@ -163,10 +166,60 @@ def dumps(obj):
 def r4(x):
     return None if x is None else round(x, 4)
 
+# ---------------------------------------------------------------- O-lens readouts, text judge, Assistant Axis
+def readouts():
+    """{pid: {"prompt": {L: cell}, "tj0": p, "r": {i: {"lens"|"raw"|"top"|"rand": {c: {L: cell}}, "tj": {c: p}, "ax": [...]}}}}.
+    A readout at cut c reads the residual after c reply tokens, i.e. the state at viewer token c - 1 (c = 0: last prompt
+    token). cell = [two readout texts, their blind 0-10 behavior scores, their 0-10 out-of-role scores]."""
+    R = "runs/olens"
+    if not os.path.exists(f"{R}/reads.jsonl"):
+        return {}
+    clip = lambda t: t.strip() if len(t.strip()) <= 700 else t.strip()[:700] + " …"
+    sc = collections.defaultdict(list)
+    for r in map(json.loads, open(f"{R}/scores.jsonl")):
+        sc[r["key"]].append((r["s"], r["behavior"], r["weird"]))
+    KIND = {"reply": "lens", "raw": "raw", "abl_top": "top", "abl_rand": "rand"}
+    O = collections.defaultdict(lambda: {"r": collections.defaultdict(dict)})
+    for r in map(json.loads, open(f"{R}/reads.jsonl")):
+        p = r["key"].split("|")  # R|<kind>|<pid>[|<i>]|<c>|<L>
+        if p[0] != "R" or (p[1] != "prompt" and p[1] not in KIND):
+            continue
+        s_ = sorted(sc.get(r["key"], []))
+        cell = [[clip(t) for t in r["texts"]], [x[1] for x in s_], [x[2] for x in s_]]
+        c, L = int(p[-2]), int(p[-1])
+        if p[1] == "prompt":
+            O[p[2]].setdefault("prompt", {})[L] = cell
+        else:
+            O[p[2]]["r"][int(p[3])].setdefault(KIND[p[1]], {}).setdefault(c, {})[L] = cell
+    for r in map(json.loads, open(f"{R}/text_judge.jsonl")):
+        kind, rest = r["sid"].split("|", 1)
+        if kind == "prompt":
+            O[rest]["tj0"] = r["p"]
+        else:
+            pid, i = rest.split("|")
+            O[pid]["r"][int(i)].setdefault("tj", {})[r["c"]] = r["p"]
+    P1 = "runs/persona_p1"
+    if os.path.exists(f"{P1}/b_proj.npz"):
+        import numpy as np
+        meta = json.load(open(f"{P1}/b_meta.json"))
+        z = np.load(f"{P1}/b_proj.npz")
+        bi, ai = meta["blocks"].index(AXIS["block"]), meta["bank"].index("axis")
+        for rid in meta["rids"]:  # index 0 = last prompt token, k = state at reply token k - 1
+            pid, i = rid.split("|")
+            O[pid]["r"][int(i)]["ax"] = [int(round(float(v) * AXIS["scale"])) for v in z[rid][:, bi, ai]]
+    return O
+
+
+# capping threshold (25th percentile on benign chat) and benign mean of the axis projection at block 48 (runs/persona_p1/cap_tau.pt)
+AXIS = {"block": 48, "scale": 10, "tau": 8.52, "mu": 11.13}
+OL = readouts()
+print(f"readouts for {len(OL)} prompts")
+
 # ---------------------------------------------------------------- build
 if os.path.exists(OUT):
     shutil.rmtree(OUT)
 os.makedirs(f"{OUT}/p")
+os.makedirs(f"{OUT}/o")
 by_prompt = collections.defaultdict(list)
 for it in items:
     by_prompt[it["pid"]].append(it)
@@ -225,6 +278,11 @@ for pid, its in by_prompt.items():
             fh.write(dumps(doc))
         n_files += 1
         entry["file"] = pid[:16]
+        if pid in OL:
+            o = OL[pid]
+            with open(f"{OUT}/o/{pid[:16]}.json", "w") as fh:
+                fh.write(dumps({"prompt": o.get("prompt"), "tj0": o.get("tj0"), "r": o["r"]}))
+            entry["o"] = True
         entry["preview"] = next((t["text"] for t in reversed(doc["chat"]) if t["role"] == "user"), "")[:160]
     prompts_index.append(entry)
 
@@ -237,6 +295,7 @@ for bid, title, desc in BEHAVIORS:
                       "top10": top10_info(bid), "rates": rate_rows(bid),
                       "sets": (["own100", "own100_rand"] if (bid, "top", 100) in abl else []) + ["shared100", "shared100_rand"]})
 index = {"scale": SCALE, "built": __import__("time").strftime("%Y-%m-%d"), "public": args.public, "has_tok": bool(tokdata),
+         "axis": AXIS if OL else None,
          "behaviors": behaviors, "prompts": prompts_index,
          "source": "agastyasridharan/weirdchat-neurons @884171f (Stage A, forks_off, phase2_forks, ablation/shared sets)"}
 with open(f"{OUT}/index.json", "w") as fh:

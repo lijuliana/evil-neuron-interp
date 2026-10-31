@@ -194,6 +194,36 @@ table.t tr.ctrl td { color: var(--faint) }
 .foot { font-size: 12.5px; color: var(--faint) }
 .foot b { color: var(--muted); font-weight: 600 }
 
+/* readouts */
+.kv2 { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 6px }
+.rd-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: 16px 0 4px; font-size: 12.5px; color: var(--muted) }
+.rd-head .seg button { padding: 3px 10px; font-size: 12px }
+.rd { border-top: 1px solid var(--rule); padding: 8px 0 }
+.rd-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-size: 11.5px; color: var(--faint); margin-bottom: 3px }
+.rd-meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums }
+.rd-text { font: 13.5px/1.5 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 10.5em; overflow: auto; scrollbar-width: thin }
+.sec h5 { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 2px }
+.plens { margin-top: 12px; max-width: 78ch }
+.plens summary { cursor: pointer; font-size: 12.5px; color: var(--muted) }
+.plens summary:hover { color: var(--ink) }
+.plens .rd:first-of-type { margin-top: 8px }
+.methods-sep { padding: 0; margin-left: 10px; height: 22px; align-self: center }
+
+/* methods compared */
+.compare { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 24px clamp(16px, 3vw, 28px); display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.compare h2 { font: 500 26px/1.2 var(--serif); margin: 0; text-wrap: balance }
+.compare > p { font: 16px/1.55 var(--serif); color: var(--muted); margin: 0; max-width: 80ch; text-wrap: pretty }
+.ct-wrap { overflow-x: auto; min-width: 0; margin-inline: -4px; padding-inline: 4px }
+table.ct { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 13.5px; line-height: 1.45 }
+table.ct th { font: 600 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule-2); vertical-align: bottom }
+table.ct td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; color: var(--ink) }
+table.ct td:first-child { width: 19%; font: 600 14px/1.35 var(--sans) }
+table.ct td:first-child small { display: block; font: 400 12.5px/1.4 var(--sans); color: var(--muted); margin-top: 3px }
+table.ct td.no { color: var(--faint) }
+table.ct tr.grp td { font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding-top: 18px; border-bottom-color: var(--rule-2) }
+table.ct tr.ref td { background: var(--tint) }
+.ct-note { font-size: 12.5px; color: var(--faint); margin: 0; max-width: 90ch; line-height: 1.5 }
+
 /* method */
 .method { margin-top: 4px }
 .method summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border-radius: 6px; color: var(--faint) }
@@ -228,7 +258,7 @@ table.t tr.ctrl td { color: var(--faint) }
   <header>
     <p class="eyebrow">Qwen3.6-27B · WeirdChat · thinking off</p>
     <h1>Finding Neurons That Turn Qwen Weird</h1>
-    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, and how much each token depends on the mediator neurons.</p>
+    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, how much each token depends on the mediator neurons, and what the O-lens and the Assistant Axis read at each token. The last tab compares these methods.</p>
   </header>
   <section>
     <nav class="behaviors" id="tabs" aria-label="Behavior"></nav>
@@ -249,7 +279,7 @@ table.t tr.ctrl td { color: var(--faint) }
         <label class="field" for="reply-select">Reply<select id="reply-select"></select></label>
         <label class="field" for="mode-select">Highlight tokens by<select id="mode-select"></select></label>
       </div>
-      <section class="block"><div class="chat" id="chat"></div><p class="prompt-meta" id="prompt-meta"></p></section>
+      <section class="block"><div class="chat" id="chat"></div><p class="prompt-meta" id="prompt-meta"></p><details class="plens" id="prompt-lens" hidden></details></section>
       <section class="block verdict" id="verdict"></section>
       <section class="block">
         <div class="block-head"><h3>Along the reply</h3><div class="legend" id="chart-legend"></div></div>
@@ -269,13 +299,78 @@ table.t tr.ctrl td { color: var(--faint) }
     <aside class="inspector" id="inspector" aria-live="polite"></aside>
    </div>
   </div>
+  <section class="compare" id="compare" hidden>
+    <p class="eyebrow">Compare methods</p>
+    <h2>Neurons against other interpretability methods</h2>
+    <p>Each method is scored on the same prompts and replies: does it warn before a reply turns weird, can it stop the behavior, and what does that cost the rest of the model. Rates are judged by Gemma 4 31B with WeirdChat's prompt; P(weird) comes from 8 to 24 resampled continuations per cut.</p>
+    <div class="ct-wrap"><table class="ct">
+      <thead><tr><th>Method</th><th>Warns before the weird turn</th><th>Stops the behavior</th><th>Cost to the rest of the model</th><th>Compute</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="5">Neurons</td></tr>
+        <tr><td>Own top-100 neurons<small>Zero each behavior's 100 neurons ranked by attribution at its forks</small></td>
+          <td class="no">Not tested yet (set activation as a monitor)</td>
+          <td>Held-out prompts: fake code execution 23% → 0%, 911 16% → 0%, laser 23% → 6%, claiming a body 29% → 6%. Denying AI: no held-out effect. Doubling the set induces the behavior on low-rate prompts.</td>
+          <td>≤ 0.023 nats/token on unrelated text; MMLU ±1 pt, GSM8K ±0.8 pt</td>
+          <td>Attribution at 46 forks, then rate tests</td></tr>
+        <tr><td>Shared mid-layer 100<small>Zero 100 neurons from layers 24–47 shared across behaviors</small></td>
+          <td class="no">–</td>
+          <td>Lowers all 8 behaviors tested: mean rate 10% vs 21% with a matched random set. Built without a behavior, it still lowers that behavior (8 of 8).</td>
+          <td>0.017 nats/token</td>
+          <td class="no">–</td></tr>
+        <tr><td>Single neurons<small>Zero one neuron at a time (1,142 screened)</small></td>
+          <td class="no">–</td>
+          <td>None works reliably on held-out prompts; the best (drunk driving) cuts it about 30% on 4 prompts.</td>
+          <td class="no">–</td>
+          <td class="no">–</td></tr>
+        <tr class="grp"><td colspan="5">Readouts</td></tr>
+        <tr><td>O-lens<small>Describe the state at each scored token, layers 32/44/56, scored blind by Haiku</small></td>
+          <td>No. Within a reply its score has rank correlation −0.08 to 0.00 with P(weird) (text judge +0.57); adding it to the text judge gains +0.01. Its rise about 8 tokens before a fork is as large when the words are read as a plain document.</td>
+          <td>Not a control method. As a measure it tracks neuron ablation: score −0.90 with the own top-100 zeroed, +0.08 for a random push of the same size.</td>
+          <td class="no">–</td>
+          <td>~2 H100-hours to read; ~33M Haiku tokens to score</td></tr>
+        <tr class="ref"><td>Text judge (reference)<small>Haiku reads only the transcript so far</small></td>
+          <td>Rank correlation +0.57 with P(weird) within a reply; +0.27 with the prompt's rate at the last prompt token</td>
+          <td class="no">–</td>
+          <td class="no">–</td>
+          <td>~7M Haiku tokens</td></tr>
+        <tr class="grp"><td colspan="5">Directions</td></tr>
+        <tr><td>Assistant Axis, capping<small>Clamp the projection at the 25th percentile of benign chat, layers 46–53</small></td>
+          <td>Weak. Prompt rate: rank correlation −0.18 at block 48; within a reply, inside the random-direction nulls.</td>
+          <td>Denying AI 33% → 24%, claiming a body 41% → 34% (not significant), laser unchanged. Beats all 5 control caps; short of the −50% bar.</td>
+          <td>0.0004 nats/token; 160/160 identity answers still say AI</td>
+          <td>~2.8 A100-hours (with steering)</td></tr>
+        <tr><td>Assistant Axis, steering<small>Add the axis at block 32</small></td>
+          <td class="no">–</td>
+          <td>Moves the identity behaviors the predicted way; laser and drunk driving do not move, cutting moves the opposite way.</td>
+          <td>&gt; 0.02 nats/token at every dose, about 10× a random direction</td>
+          <td class="no">included above</td></tr>
+        <tr><td>Persona trait vectors<small>Project onto evil, sycophantic, hallucinating and 6 other vectors</small></td>
+          <td>Evil and hallucinating predict prompt rates about as well as the axis. The drunk-driving direction aligns with sycophantic and optimistic.</td>
+          <td class="no">Not tested</td>
+          <td class="no">–</td>
+          <td class="no">included above</td></tr>
+        <tr><td>Weird-vs-normal directions<small>Difference of means between weird and normal replies to the same prompt</small></td>
+          <td>On whole replies, AUROC: drunk driving .84–.86, chemtrails .85–.88, cutting .72–.78, laser .66–.68 (shuffled labels ≤ .69). Drunk driving is readable from the opening tokens.</td>
+          <td class="no">Projecting it out not run yet</td>
+          <td class="no">–</td>
+          <td>~2.4 A100-hours (with the shared-set test)</td></tr>
+        <tr class="grp"><td colspan="5">Not run yet</td></tr>
+        <tr><td>J-lens<small>Lens weights for this model are on our VM (camilablank/workspace-lenses)</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+        <tr><td>NLA, layer 42<small>Explanations exist for WeirdChat transcripts (syvb/nla-weirdchat-explanations), not for these replies</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+        <tr><td>SAE, layer 42<small>ceselder/qwen36-27b-sae-l42-1b</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+      </tbody>
+    </table></div>
+    <p class="ct-note">Not yet run for any method: whether its output helps predict which prompt edits change the behavior (a CHIVE-style counterfactual test). Neuron rows come from the fork-and-ablate pipeline (Phase 2); the O-lens, Assistant Axis, persona and direction rows are our runs on the same prompts.</p>
+  </section>
   <details class="method" id="method">
     <summary><h2>How to read this</h2></summary>
     <div class="method-body">
     <div><h3>P(weird | prefix)</h3><p>Each weird reply was cut at about ten places. At each cut the rest of the reply was regenerated 8 to 16 times from the same prefix, and Gemma 4 31B judged every continuation. Dotted underlines mark the measured cuts; between cuts the last measured value carries forward. The fork is the token where the chance jumps the most, found by bisection.</p></div>
     <div><h3>Zero-ablation</h3><p>Each reply was teacher-forced once clean and once with a neuron set zeroed at the down_proj input (the MLP neuron activations), at every position. −Δlog p is the drop in each token's log-probability under ablation, in nats; 2.3 nats is a tenfold drop. Own sets are each behavior's top 100 neurons by attribution at its forks. The shared set is 100 neurons from layers 24 to 47 that lower all eight behaviors. Each set has a random control drawn from the same layers with matched activation size.</p></div>
     <div><h3>In-sample caution</h3><p>Every forked reply here comes from the discovery prompts, and the own sets were picked by attribution at these same forks, so strong support at a fork token is expected by construction. The rate bars pool both splits. The out-of-sample test is the held-out split, phrasings the sets never saw: removing the top 100 still takes fake code execution and 911 to 0% and laser and claiming a body to about 6%, while denying being an AI does not drop at all. This view adds where else in a reply a set matters, and how normal replies to the same prompt compare.</p></div>
-    <div><h3>Neuron activations</h3><p>Activations are read at the position that produced the token, so they show the state the model was in when it chose it. Oracle-lens readouts will be added at each token once that run is validated.</p></div>
+    <div><h3>Neuron activations</h3><p>Activations are read at the position that produced the token, so they show the state the model was in when it chose it.</p></div>
+    <div><h3>O-lens readouts</h3><p>The O-lens (agu18dec/olens_and_ar, checkpoint s3d_rl600) turns the residual state after a token into a short description, read twice per position at layers 32, 44 and 56. A blind Haiku judge scored each description 0 to 10 for the reply's behavior and for being out of the assistant role. Readouts exist at the measured cuts and at every token from 40 before to 20 after the 46 sharp forks; around those forks the same words were also read as a plain document, and with the own top-100 or a random 100 neurons zeroed. The text judge is Haiku reading only the transcript so far and estimating the chance the finished reply shows the behavior.</p></div>
+    <div><h3>Assistant Axis</h3><p>Projection of the block-48 state onto the Assistant Axis (community Qwen3.6-27B vectors), the direction from role-play toward the default assistant. The dashed line is the capping threshold, the 25th percentile on benign chat; capping during generation lifts states below it back up to it at layers 46 to 53.</p></div>
     <p class="source" id="source-line"></p>
     </div>
   </details>
