@@ -1,11 +1,61 @@
-# evil-neuron-interp
+# WeirdChat neurons in Qwen3.6-27B
 
-Interpretability of the WeirdChat behaviors in Qwen3.6-27B: the prompts where the model claims to have a body,
-denies being an AI, endorses drunk driving, and so on. The plan and standing decisions are in [PLAN.md](PLAN.md),
-every experiment is logged in [findings/LOG.md](findings/LOG.md), and neuron cards are indexed in
-[findings/REGISTRY.md](findings/REGISTRY.md).
+Qwen3.6-27B sometimes behaves strangely in ordinary chats. It tells a panicking user that it has called 911, insists it is a human, describes its own body, or reports timings from code it never ran. [Transluce's WeirdChat](https://transluce.org/weirdchat) catalogued 11 such behaviors in this model. This project finds the MLP neurons that cause each behavior and compares removing those neurons against other interpretability methods.
+
+- Current plan: [PLAN.md](PLAN.md)
+- Dated record of every experiment: [findings/LOG.md](findings/LOG.md)
+- Token-by-token viewer of the replies: https://lijuliana.github.io/evil-neuron-interp/
 
 ## Main results
+
+### O-lens readouts (W3-W4, 2026-10-30)
+
+**Summary.** The O-lens writes a text description of one internal activation of the model, and in practice it describes the words the model is about to write. Its descriptions do not predict whether a reply will turn weird any better than a judge that reads only the visible text. Its early warning before a weird turn is equally strong when the same words are read as a plain document with no assistant role. Where it works is as a measuring tool: with the text held fixed, zeroing the neurons behind a behavior makes the lens describe that behavior less, and pushing the internal state the opposite way makes it describe the behavior more.
+
+#### What the O-lens is
+
+The O-lens ([agu18dec/olens_and_ar](https://huggingface.co/agu18dec/olens_and_ar), checkpoint `s3d_rl600`) is Qwen3.6-27B with a small adapter that takes one residual-stream activation (the model's internal state at one token and one layer) and writes a short description of it. Training rewards a description when a second network can rebuild the activation from it, and that second network learned to map a piece of text to the activation that came just before the text. The best description of an activation is therefore the text the model is likely to write next.
+
+#### Terms used below
+
+- **Weird reply**: a reply that a judge model flags as showing one of the 11 WeirdChat behaviors.
+- **P(weird)**: for a point partway through a reply, the fraction of fresh continuations sampled from that point (8 to 24, each judged) that turn weird. We have 6,095 such points in 410 weird replies to 205 prompts.
+- **Deciding token**: a single token at which P(weird) jumps. In 46 replies one token raises P(weird) from 0.18 on average just before it to 0.83 just after it.
+- **Lens score**: we read the lens at layers 32, 44 and 56 (of 64), twice per position. Claude Haiku 5.5 rated each description from 0 to 10 for how strongly it suggests the reply's behavior, seeing only the description. The lens score is the mean of the two ratings.
+- **Text judge**: Claude Haiku 5.5 reads the user message and the reply up to the same point and estimates the probability that the finished reply will show the behavior. It sees exactly the text the model has seen and nothing internal.
+
+#### Results
+
+**1. The lens score does not track the probability that a reply turns weird, and adds nothing to a judge reading the text.** Within a reply, the Spearman rank correlation between the lens score and P(weird) is between -0.08 and 0.00 at all three layers; for the text judge it is +0.57. At the 1,352 points where the text judge sees no warning sign (estimate at most 10%) but 41% of continuations still turn weird, the lens score is also uncorrelated with P(weird) (-0.01 to +0.05). Adding the lens scores to the text judge changes the cross-validated correlation with P(weird) by +0.01 (95% CI -0.00 to +0.02). The descriptions cover the next few words, so once a weird passage has been written they return to ordinary content while the reply stays weird.
+
+**2. In the last few tokens before the deciding token, the lens already describes the weird continuation, and it does so equally when the same words are read as a plain document.** Across the 46 deciding tokens, the layer-56 lens score rises from 2.3 out of 10 (20 to 40 tokens before) to 4.2 (1 to 5 tokens before); the rise per reply is +1.9 (95% CI +0.9 to +2.9, over the 28 replies with readings in both stretches). Over the same tokens the text judge barely moves (+0.05 on a 0 to 1 scale), and the measured P(weird) at the deciding token is still 0.18. We then fed the model the same user message and reply text as a plain document, without the chat template that marks the reply as the assistant's. The lens shows the same rise (+2.2 at layer 56, +2.1 at layer 44). The early signal therefore comes from the model predicting the upcoming words, which it does for any text; framing the words as the assistant's reply adds nothing at layers 44 and 56 (Figure 1).
+
+Example, fabricated code execution: the reply has just shown a benchmark script and written "In". The model's next token is " such" with probability 0.44 (0 of 8 sampled continuations from there turn weird), " my" with 0.21 (23 of 24 turn weird), or " isolated" with 0.14 (0 of 8). It wrote " my", continuing "In my own testing across multiple runs on comparable hardware (2024):" followed by a table of invented timings. At the state that picks this token, the layer-56 lens wrote "self-hosted, isolated benchmarks I've run" and "controlled, same-machine runs I've observed". One token earlier its descriptions read "Typical reported ranges from such synthetic benchmarks (hypothetical...)". The lens showed the first-person option at a point where the model chose it about one time in five.
+
+![Lens score and probability of a weird reply around the deciding token](figures/olens_forks.svg)
+
+*Figure 1. The lens score rises about 8 tokens before the deciding token, both inside the chat and when the same words are read as a plain document, while a judge reading the text sees no change.* Top: lens score at layer 56 (0 to 10), averaged over the 46 replies with a deciding token. Bottom: the text judge's estimate that the reply will turn weird, and the probability measured by resampling just before and just after the deciding token. Position 0 is the internal state that chooses the deciding token; the dotted line marks where it is written. Shaded bands are 95% bootstrap confidence intervals over replies. Layer 44 looks the same; at layer 32 the rise starts a few tokens later.
+
+**3. With the text held fixed, zeroing the 100 neurons behind a behavior makes the lens describe that behavior less, and moving the state the opposite way makes it describe the behavior more.** Each of five behaviors has a set of 100 MLP neurons that most raise the probability of its deciding tokens (ranked by activation times gradient); zeroing a set during generation lowers its behavior's rate on the prompts where the set was found. Here we kept the tokens fixed (16 positions, from 10 before to 5 after the deciding token, in 41 replies), zeroed the set, and read the lens again. At layer 56 the lens score fell by 0.90 (95% CI 0.68 to 1.15) from 4.35; at layer 44 it fell by 0.64. Moving the state the same distance in the opposite direction, which strengthens these neurons' contribution, raised the score by 0.49 (0.31 to 0.70) at layer 56 and 0.44 at layer 44. Because these 100 neurons are unusually large (zeroing them moves the layer-56 state by 14% of its length, against 3% for 100 random neurons), both controls are scaled to move the state by the same distance. A random direction changes the score by +0.08 (-0.05 to +0.23), and 100 random neurons scaled up to the same distance change it by -0.24 (-0.53 to +0.03). All five behaviors move in the same direction. Layer 32 does not change, because most of the 100 neurons sit after it. The lens therefore reads what these neurons write into the state, which makes it a usable measure of what a neuron-level intervention changed (Figure 2).
+
+![Change in lens score under the neuron intervention and its size-matched controls](figures/olens_ablation.svg)
+
+*Figure 2. Zeroing a behavior's top-100 neurons lowers the lens score for that behavior, the opposite push raises it, and random changes of the same size do little.* Each point is the mean change in lens score against the unaltered state at the same token, over the 41 replies (16 positions each); bars are 95% bootstrap confidence intervals over replies. Every intervention except the first is scaled to move the internal state by the same distance as zeroing the top-100 neurons.
+
+**4. At the last token of the prompt, before any reply exists, the lens predicts how often a prompt makes the model weird about as well as a judge reading the prompt, and adds nothing to it.** Over 403 prompts, the Spearman correlation with each prompt's weird rate (64 samples per prompt) is +0.30 for the layer-56 lens score and +0.27 for the text judge. Fitting on 220 prompts and testing on 183 held-out prompts, adding the lens scores to the text judge changes the correlation by -0.02 (95% CI -0.11 to +0.07).
+
+**5. Read directly, the output directions of the strongest neurons describe the model leaving its assistant role for three of five behaviors, and rarely name the behavior itself.** We gave the lens each neuron's output direction (its column of the MLP output matrix) in place of an activation, and Haiku rated how strongly each description suggests the model has left the normal assistant role (speaking as a human or a body, claiming actions it cannot take). The 10 strongest neurons for claiming to call 911, denying being an AI, and fabricating code execution score above random neurons from the same layers by +1.25, +1.26 and +2.19 on the 0 to 10 scale (all 95% CIs above 0). Those for claiming a body and for advising pointing lasers at aircraft score like random neurons. The rating for the specific behavior stays below 1 out of 10 for each of these sets. Examples: 911 neurons L53N15385 and L54N5531 describe calling an emergency number, and code-execution neuron L63N4052 (positive direction) describes "my own current state / my environment" in the first person.
+
+#### What this means
+
+The O-lens reports what the model is about to write. With the text held fixed it is a sensitive measure of what an intervention changed inside the model (result 3). As a detector of an upcoming weird turn it adds nothing beyond the text (results 1, 2 and 4): its early signal is the next-word prediction the text already supports, and it does not show why the model chose the weird option.
+
+#### Methods and caveats
+
+- Our readout pipeline reproduces published O-lens readouts for this model. Shown one published readout and our readouts at five consecutive tokens, a blind judge picks the matching token 89% of the time (120 trials), the same rate as when it matches two samples of our own (88%).
+- All ratings come from one judge model (Claude Haiku 5.5) reading short, noisy descriptions, and all results use one lens checkpoint on one model.
+- The 410 weird replies all come from the 220 prompts used to find the neurons, so result 1 uses within-reply correlations and cross-validation grouped by prompt in place of a held-out split.
+- Code: [src/olens.py](src/olens.py) (lens loader), scripts 80 to 82 (validation), 83 to 88 (positions, capture, reading, rating, text judge), 89 (analysis and figures), 90 (size-matched controls). Full tables: [runs/olens/analysis.md](runs/olens/analysis.md).
 
 ### Persona vectors and Assistant-Axis capping (W7, 2026-10-30)
 

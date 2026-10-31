@@ -1,7 +1,7 @@
 """O-lens W4 analysis (PLAN.md decisions 1-4, 11). Inputs: data/olens/seqs.jsonl, runs/olens/scores.jsonl (scripts/87),
 runs/olens/text_judge.jsonl (scripts/88), Agastya's curves, Phase 2 forks and prompt rates. Lens score at a position =
-mean over its 2 readouts of the 0-10 'behavior' (or 'weird') score. Writes runs/olens/analysis.md and
-runs/olens/fork_timecourse.png.
+mean over its 2 readouts of the 0-10 'behavior' (or 'weird') score. Writes runs/olens/analysis.md and the README
+figures figures/olens_forks.svg and figures/olens_ablation.svg (PNG copies in runs/olens/).
   1 cut points: Spearman with measured P(weird | prefix), pooled and within reply, lens per layer vs the text judge;
     does the lens add to the text judge (OLS, 5-fold cross-validation grouped by prompt); the subset where the text judge
     sees nothing (p <= 0.1). All 410 fork replies come from discovery prompts, so there is no held-out split here.
@@ -168,25 +168,49 @@ for L in LAYERS:
     d = (pre[f"lb{L}"] - pre[f"lb{L}_raw"])
     out.append(f"\nChat minus raw, rel -5..0, L{L}: {fmt(d.mean(), boot(pre.assign(d=d), lambda x: x.d.mean(), 'rid'))}")
 
+# README figures (figures/): serif text, Okabe-Ito colors, their own rng so the tables above and below stay unchanged
+frng = np.random.default_rng(1)
 try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    plt.rcParams.update({"font.family": "serif", "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+                         "mathtext.fontset": "cm", "font.size": 9, "axes.spines.top": False, "axes.spines.right": False,
+                         "axes.linewidth": 0.6, "xtick.major.width": 0.6, "ytick.major.width": 0.6, "svg.fonttype": "path"})
+    os.makedirs("figures", exist_ok=True)
+
+    def band(d, col):  # per-token mean and 95% CI over forks
+        g = d.dropna(subset=[col]).groupby("rel")[col]
+        ci = np.array([np.percentile([frng.choice(v.values, len(v)).mean() for _ in range(500)], [2.5, 97.5]) for _, v in g])
+        return g.mean(), ci[:, 0], ci[:, 1]
+
     W2 = F[F.rel.between(-40, 20)]
-    fig, ax = plt.subplots(1, len(LAYERS), figsize=(4 * len(LAYERS), 3.2), sharey=True, squeeze=False)
-    t = W2[W2.kind == "reply"].groupby("rel").text.mean() * 10
-    for a, L in zip(ax[0], LAYERS):
-        for kind, col, lab in (("reply", "#1f3f8f", "lens, chat"), ("raw", "#8fa7d8", "lens, raw document")):
-            m = W2[W2.kind == kind].groupby("rel")[f"lb{L}"].mean()
-            a.plot(m.index, m.values, color=col, label=lab)
-        a.plot(t.index, t.values, color="#c9472b", ls="--", label="text judge x10")
-        a.axvline(0, color="#999", lw=0.8)
-        a.set_title(f"block {L}", fontsize=9)
-        a.set_xlabel("tokens relative to the fork token")
-    ax[0][0].set_ylabel("behavior score (0-10)")
-    ax[0][0].legend(fontsize=7, frameon=False)
-    fig.tight_layout()
-    fig.savefig(f"{R}/fork_timecourse.png", dpi=150)
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(6.5, 4.4), sharex=True, gridspec_kw={"height_ratios": [3, 2]},
+                                 constrained_layout=True)
+    for kind, col, ls, lab in (("reply", "#0072B2", "-", "Read inside the chat (assistant reply)"),
+                               ("raw", "#E69F00", "--", "Same words read as a plain document")):
+        m, lo, hi = band(W2[W2.kind == kind], "lb56")
+        a1.fill_between(m.index, lo, hi, color=col, alpha=0.18, lw=0)
+        a1.plot(m.index, m.values, color=col, ls=ls, lw=1.2, label=lab)
+    a1.set_ylim(0, 10)
+    a1.set_ylabel("Lens score for the\nbehavior (0 to 10)")
+    a1.legend(loc="upper left", frameon=False)
+    m, lo, hi = band(W2[W2.kind == "reply"], "text")
+    a2.fill_between(m.index, lo, hi, color="#555555", alpha=0.18, lw=0)
+    a2.plot(m.index, m.values, color="#555555", lw=1.2, label="Estimate by a judge reading the text so far")
+    a2.plot([0, 1], [np.mean([f["Plo_on"] for f in P2]), np.mean([f["Phi_on"] for f in P2])], "o", color="#D55E00",
+            ms=4.5, label="Measured by resampling the reply")
+    a2.set_ylim(0, 1)
+    a2.set_ylabel("Probability the\nreply turns weird")
+    a2.legend(loc="upper left", frameon=False)
+    a2.set_xlabel("Position in the reply, in tokens relative to the deciding token")
+    for a in (a1, a2):
+        a.axvline(0.5, color="#999999", lw=0.6, ls=":")
+    a1.text(1.2, 0.98, "deciding token\nwritten here", transform=a1.get_xaxis_transform(), va="top", fontsize=8,
+            color="#555555")
+    fig.savefig("figures/olens_forks.svg")
+    fig.savefig(f"{R}/olens_forks.png", dpi=200)
+    plt.close(fig)
 except Exception as e:  # plotting is optional
     out.append(f"\n(plot skipped: {e})")
 
@@ -233,6 +257,7 @@ if os.path.exists(f"{R}/abl_control_scores.jsonl"):
     K = pd.DataFrame([{"cond": k.split("|")[1], "rid": "|".join(k.split("|")[2:-2]), "c": int(k.split("|")[-2]),
                        "L": int(k.split("|")[-1]), "lb": np.mean(v)} for k, v in cs.items()])
     conds = ["clean", "rand", "top", "amp", "rand_s", "gauss"]
+    ctl = {}  # (condition, layer) -> (mean change vs clean, CI low, CI high), for the README figure
     out += ["", "### Size-matched controls (scripts/90), all six conditions scored together in one blind pool", "",
             "amp = h_clean - d_top (the same neurons pushed the other way); rand_s = the random-100 ablation direction scaled "
             "to |d_top|; gauss = a random direction at |d_top|. Differences are vs clean, paired by position, 95% CI over forks.", "",
@@ -243,12 +268,36 @@ if os.path.exists(f"{R}/abl_control_scores.jsonl"):
         cells = [f"{w[c].mean():.2f}" for c in conds]
         for c in ("top", "amp", "rand_s", "gauss"):
             x = w.assign(d=w[c] - w.clean).dropna(subset=["d"])
-            cells.append(fmt(x.d.mean(), boot(x, lambda q: q.d.mean(), "rid")))
+            ctl[(c, L)] = (x.d.mean(), *boot(x, lambda q: q.d.mean(), "rid"))
+            cells.append(fmt(ctl[(c, L)][0], ctl[(c, L)][1:]))
         out.append(f"| L{L} | " + " | ".join(cells) + " |")
     K["b"] = K.rid.map(lambda r: seqs[f"reply|{r}"]["b"])
     w = K[K.L == 56].pivot_table(index=["b", "rid", "c"], columns="cond", values="lb").reset_index()
     out += ["", "By behavior, L56 (forks): top - clean | amp - clean", ""] + [
         f"- {b} ({g.rid.nunique()}): {(g.top - g.clean).mean():+.2f} | {(g.amp - g.clean).mean():+.2f}" for b, g in w.groupby("b")]
+    try:
+        conds_fig = [("top", "Zero the behavior's top-100 neurons"),
+                     ("amp", "Push the same neurons the other way\nby the same distance"),
+                     ("rand_s", "Zero 100 random neurons, scaled\nto move the same distance"),
+                     ("gauss", "Move the same distance\nin a random direction")]
+        fig, a = plt.subplots(figsize=(6.5, 2.6), constrained_layout=True)
+        for j, (L, col, mk) in enumerate(((44, "#56B4E9", "o"), (56, "#0072B2", "s"))):
+            for i, (c, _) in enumerate(conds_fig):
+                m, lo, hi = ctl[(c, L)]
+                a.errorbar(m, i + (j - 0.5) * 0.24, xerr=[[m - lo], [hi - m]], fmt=mk, color=col, ms=4.5, lw=1,
+                           capsize=0, label=f"Layer {L} of 64" if i == 0 else None)
+        a.axvline(0, color="#999999", lw=0.6)
+        a.set_yticks(range(len(conds_fig)), [t for _, t in conds_fig])
+        a.tick_params(axis="y", length=0)
+        a.spines["left"].set_visible(False)
+        a.invert_yaxis()
+        a.set_xlabel("Change in the lens score for the behavior (0 to 10 scale)")
+        a.legend(loc="lower right", frameon=False)
+        fig.savefig("figures/olens_ablation.svg")
+        fig.savefig(f"{R}/olens_ablation.png", dpi=200)
+        plt.close(fig)
+    except Exception as e:  # plotting is optional
+        out.append(f"\n(plot skipped: {e})")
 
 # 4 prompt level
 Pq = X.reset_index()
