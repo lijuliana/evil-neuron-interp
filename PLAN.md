@@ -18,7 +18,7 @@ Model: Qwen3.6-27B bf16 on GCP (`weirdchat-a100`, A100-80GB; spot H100s for bulk
 - Output: class presentation and a blog/forum post. Results as dated entries in `findings/LOG.md`, headline results in
   `README.md`.
 - Links: living doc https://claude.ai/artifact/AHGGWnNe8u9Uj8znQrmC4e, viewer https://claude.ai/artifact/G9CW1GnmssXLBhb3aKWsfj,
-  public site https://lijuliana.github.io/evil-neuron-interp/
+  public site https://lijuliana.github.io/weirdchat-neuron-interp/
 
 ## What we have
 | Asset | Where |

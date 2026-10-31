@@ -2,7 +2,7 @@
 
 Qwen3.6-27B sometimes behaves strangely in ordinary chats: it tells a panicking user it has called 911, insists it is human, describes its own body, or reports timings from code it never ran. [Transluce's WeirdChat](https://transluce.org/weirdchat) catalogued 11 such behaviors in this model. This project finds the MLP neurons that cause each behavior and compares removing them against other interpretability methods.
 
-Token viewer: https://lijuliana.github.io/evil-neuron-interp/
+Token viewer: https://lijuliana.github.io/weirdchat-neuron-interp/
 
 ## Comparisons to other interp methods
 
