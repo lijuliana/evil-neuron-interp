@@ -27,7 +27,7 @@ Model: Qwen3.6-27B bf16 on GCP (`weirdchat-a100`, A100-80GB; spot H100s for bulk
 | 403 prompts x 64 replies with token IDs, 410 fork curves, 46 sharp forks, top-100 / shared neuron sets | data/agastya/ |
 | Token viewer: fork replies + contrast replies, per-token P(weird), set support, top neuron activations | viewer/, scripts 50-52 |
 | O-lens loader and bulk readouts (s3d_rl600, layers 32/44/56) with the text-judge comparison | src/olens.py, scripts 80-90, README |
-| Persona vectors: axis vs rates and fork values (P1); axis capping during generation (P3) | runs/persona_p1/, runs/persona_p3/ |
+| Persona vectors: axis vs rates and fork values (P1); axis capping during generation (P3); follow-ups X1-X3, X6 | runs/persona_p1/, runs/persona_p3/, runs/persona_fwd/, runs/persona_gen/ |
 | Gradual behaviors: shared-set ablation (G1); weird-vs-normal residual directions, AUROC .66-.88 (G2) | runs/gradual_g1/, runs/gradual_g2/ |
 | J-lens / R-lens for the 27B (camilablank/workspace-lenses) | VM /data/lenses |
 
@@ -36,7 +36,10 @@ Model: Qwen3.6-27B bf16 on GCP (`weirdchat-a100`, A100-80GB; spot H100s for bulk
 - W3-W4 O-lens: readouts do not predict P(weird | prefix) beyond a text judge; the pre-fork rise also appears when the
   text is read as a plain document; ablate-and-re-read with size-matched controls is positive (README).
 - W7 persona: capping the Assistant Axis lowers denying-AI by 27% and embodiment by 18% on held-out prompts at almost
-  no side effects, below the 50% bar.
+  no side effects, below the 50% bar. Follow-ups (2026-11-01): the strongest cap under the damage gate (50th pct, layers
+  40-59) halves denying-AI and cuts embodiment 60%, but only 20% / 48% beyond matched controls; the 911 and code
+  top-100 sets cancel the persona slip out of sample, the identity sets do not; role and sycophancy directions add
+  nothing over the axis. X4 (multi-turn drift) cancelled.
 - W6a gradual: only sharedmid100 cuts drunk driving / chemtrails / cutting (-53% vs one matched random set).
 
 ## Next (from the 10/30 meeting)
@@ -57,12 +60,6 @@ Also:
   its patterns are in our 403 prompts, two of them contain one of our 46 sharp forks.
 - Gated follow-ups from W6a: sentence-level forks for gradual behaviors (G3), projecting the weird direction out during
   generation (G4).
-- Persona follow-ups (approved 2026-11-01), same P3 prompts, seeds and Gemma judge:
-  X1 do the top-100 sets cancel the weirdness added by steering away from the Assistant end (fork value, no judge);
-  X2 search the 265 role vectors for the direction that matches weird-vs-normal, then cap it vs other roles;
-  X3 is each behavior just sycophancy (sycophantic trait vector vs other traits, drunk driving first);
-  X4 multi-turn drift prefixes (emotional / meta-reflection vs neutral) with and without capping;
-  X6 cap dose sweep (tau percentile x layer range) with matched role-pair controls. Not doing X5 (own axis) for now.
 - Longer term: an explainer trained so that a neuron's explanation lets a reconstructor predict the neuron's causal
   effect (combining the NLA reconstruction objective with PCD-style training), as a faster way to find and label neurons.
 

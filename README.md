@@ -27,14 +27,14 @@ Figures: [forks](figures/olens_forks.svg), [ablation](figures/olens_ablation.svg
 
 ### Assistant Axis / persona vectors
 
-**Capping the Assistant Axis is nearly free and specific to the identity behaviors, but too weak: -27% on denying-AI against a -50% bar. The top-100 neuron sets do more where they work.**
+**Capping the Assistant Axis is nearly free and specific to the identity behaviors, but too weak. At the strongest setting inside the damage gate it halves denying-AI and cuts embodiment 60%, yet only 20% and 48% of the clean rate is beyond matched controls, against a 50% bar. The top-100 neuron sets do more where they work.**
 
 Setup: community Qwen3.6-27B axis and 9 trait vectors ([Same0620/qwen36-27b-assistant-axis-persona-vectors](https://huggingface.co/Same0620/qwen36-27b-assistant-axis-persona-vectors), validated against the card and our own axis; with its style component removed it acts like the full axis, so its effects are not writing style); capping as in the Assistant Axis paper at layers 46-53, tau = 25th percentile on benign chat; Gemma 4 31B judge with WeirdChat's prompt.
 
 1. **Weak as a probe.**
    - Last prompt token vs prompt rate: Spearman -0.18 (block 48, 403 prompts, 99th percentile of nulls); nothing at blocks 16/32.
    - Within reply vs P(weird | prefix): r -0.00 to +0.16, inside the nulls; a pre-fork lead only for denying-AI (rho -0.27 to -0.29).
-2. **Capping during generation: specific but small** (8 replies per prompt).
+2. **Capping during generation at the paper's setting: specific but small** (8 replies per prompt).
 
    | condition | denying AI (10 prompts) | claiming a body (10) | laser at aircraft (6, control) |
    |---|---|---|---|
@@ -46,8 +46,27 @@ Setup: community Qwen3.6-27B axis and 9 trait vectors ([Same0620/qwen36-27b-assi
 
    - Drop beyond the controls: 26% of the clean rate for denying-AI (95% CI 5-46%), 17% for embodiment (CI -29 to 67%); the whole effect sits in the 5 held-out prompts per behavior.
    - Damage: 0.0004 nats/token on capability text, 0.005 on benign chat; 160/160 identity-check replies still say they are an AI.
-3. **Steering along the axis fits only the identity behaviors and costs too much.**
+3. **A stronger cap roughly doubles the effect but still misses the bar** (dose sweep over tau = 25/50/75th percentile x layers 46-53 / 40-59; strongest setting under 0.02 nats/token fixed before generation; re-run on one H100 with its own clean baseline, so rates differ slightly from the table above).
+
+   | condition | damage (nats/token) | denying AI | claiming a body | laser (control) |
+   |---|---|---|---|---|
+   | no intervention | 0 | 35% | 47.5% | 37.5% |
+   | paper's setting (25th pct, layers 46-53) | 0.006 | 21% | 34% | 50% |
+   | 50th pct, layers 40-59 | 0.020 | 17.5% | 19% | 50% |
+   | 3 control caps at that setting | 0.009-0.022 | 24-35% | 41-45% | 48-54% |
+
+   - Drop beyond the controls: 20% of the clean rate for denying-AI (CI -3 to 40%), 48% for embodiment (CI -7 to 87%), pooled 36% (CI 7-60%). Both prompt splits move now, not just held-out.
+   - The 75th-percentile settings fail the damage gate and do no better. Denying-AI is flat across every gated dose; embodiment keeps falling with dose.
+   - Laser rises under every cap, the controls included (+4 to +17 points), so that rise is not specific to the axis.
+4. **Steering along the axis fits only the identity behaviors and costs too much.**
    - Steering away from the Assistant end raises the identity behaviors' fork values (+0.10 to +0.41); laser and drunk driving do not move, and cutting moves the opposite way.
    - Every dose costs > 0.02 nats/token, about 10x a random direction of the same norm.
+5. **The top-100 sets carry the persona slip for 911 and code execution, not for the identity behaviors.**
+   - Steering away from the Assistant end raises fork values by 0.137 on average; with the behavior's top-100 set zeroed, by 0.059 (57% cancelled: 81% on the forks the sets were found on, 38% on others).
+   - On forks the sets were not found on, the 911 and code-execution sets cancel the whole push (105%, 84%); the denying-AI and embodiment sets do not (-16%, 23%). 100 random neurons and random pushes show no interaction.
+   - The push is a heavy mechanism test (0.53 nats/token), not an intervention.
+6. **Neither a better-matched role nor sycophancy beats the axis.**
+   - Each behavior leans toward one of the 265 role directions on prompts not used to pick it (denying-AI: teenager / amateur; 911: caregiver; laser: tutor). Capping teenager halves denying-AI (35% to 17.5%, 44% beyond controls) but costs 0.026 nats/token, raises laser to 62.5%, and is no better than the axis cap (-4 points, CI -11 to +3). Capping actor, the embodiment pick, acts like the axis (cosine 0.89).
+   - Only drunk driving lines up with the sycophancy vector. Capping sycophancy lowers it from 25% to 16%, below all 5 controls but only 18% beyond them, and only on discovery prompts. The vector does make the model flatter, but only at a dose costing 0.78 nats/token.
 
-Caveats: 10 prompts per behavior, 5 control caps (beating all 5 happens by chance 1 time in 6), community vectors, capping layers borrowed from Qwen3-32B. Code: scripts 70-72.
+Caveats: 10 prompts per behavior, 3-5 control caps (beating all 3 happens by chance 1 time in 4, all 5 1 time in 6), community vectors, capping layers borrowed from Qwen3-32B. Code: scripts 70-74.
