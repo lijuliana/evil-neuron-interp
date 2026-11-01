@@ -307,6 +307,9 @@ table.ct tr.ref td { background: var(--tint) }
 .sw.sq { width: 8px; height: 8px; border-radius: 1.5px; background: var(--c) }
 .fig-group { margin: 14px 0 -18px; padding-top: 14px; border-top: 1px solid var(--rule-2); font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint) }
 .fig-group:first-child { margin-top: 0; padding-top: 0; border-top: 0 }
+.fig-notes ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: var(--ink); max-width: 92ch; text-wrap: pretty }
+.fig-notes li::marker { color: var(--faint) }
+.fig-notes li b { font-weight: 600 }
 .fig svg .bv { font: 11px var(--mono); fill: var(--muted) }
 .fig svg .glab { font-size: 12px; fill: var(--ink) }
 .fig svg .glab.s { font-size: 10.5px }
@@ -427,6 +430,18 @@ table.ct tr.ref td { background: var(--tint) }
         <svg id="fig-stop" role="img" aria-label="Behavior rates under each intervention on the same prompts"></svg>
         <figcaption><b>Figure 4.</b> Share of replies showing the behavior, 8 replies per prompt (10 prompts each for denying being an AI and claiming a body, 6 for laser), judged by Gemma 4 31B with WeirdChat's prompt; whiskers are 95% Wilson intervals. The cap clamps the Assistant Axis at the 25th percentile of benign chat at layers 46 to 53; the 5 other caps clamp other persona directions the same way. Laser at aircraft is not an identity behavior and serves as a control for the cap. Cost, as the increase in next-token loss on capability text in nats per token: Assistant Axis cap 0.0004, other caps 0.0003 to 0.003, top-100 0.002 to 0.005, random-100 0.0001. For denying being an AI, the neuron set's drop comes from the prompts it was chosen on and vanishes on held-out prompts, while the cap's drop comes from held-out prompts.</figcaption>
       </figure>
+      <p class="fig-group">Persona vectors</p>
+      <div class="fig fig-notes">
+        <h3>Stronger caps, role directions and sycophancy all stay under the bar; for 911 and fake code execution, the persona slip runs through the neurons</h3>
+        <ul>
+          <li><b>Capping harder doubles the effect but stays under the bar.</b> At the 50th percentile over layers 40 to 59 (0.020 nats/token, the most the damage limit allows), denying AI falls from 35% to 17.5% and claiming a body from 47.5% to 19%, on held-out and discovery prompts alike. Beyond 3 control caps that is 20% and 48% of the clean rate, against a 50% bar. Harder caps break the damage limit without lowering the rates further.</li>
+          <li><b>Every cap raises laser,</b> the control caps included (+4 to +17 points), so that rise is a side effect of capping, not of the axis.</li>
+          <li><b>For 911 and fake code execution, the persona slip runs through the top-100 neurons.</b> Pushing the state away from the Assistant end raises the chance of turning weird at the forks. With the 911 or code-execution set zeroed, the push loses all or most of its effect (105%, 84% cancelled), even at forks those sets were not chosen on. The denying-AI and claiming-a-body sets do not block it, and neither do 100 random neurons.</li>
+          <li><b>The neurons do not work by moving the model off the Assistant end.</b> Zeroing them moves the state toward the Assistant by 0.2 of the Assistant-to-roles distance for claiming a body, 0.1 for 911, 0.05 for denying AI and 0 for code execution and laser. Capping moves claiming a body 3 to 4 times further and still lowers its fork value less, so that shift explains at most a small part of what the neurons do.</li>
+          <li><b>A better-matched role is no better than the axis.</b> Each behavior leans toward a recognizable role (denying AI: teenager, amateur; 911: caregiver; laser: tutor). Capping teenager halves denying AI but costs 0.026 nats/token and raises laser to 62.5%, and capping the matched role makes 911 and code execution more likely at the forks.</li>
+          <li><b>Only drunk driving looks like sycophancy, and only a little.</b> Capping the sycophancy vector lowers drunk driving from 25% to 16%, more than 5 control caps, but only on discovery prompts. At the forks of all 11 behaviors it beats its controls only for drunk driving (−5%) and claiming a body (−12%), and in generation the hallucination cap lowers claiming a body more. Steering with the vector does make replies flatter, but only at 0.78 nats/token.</li>
+        </ul>
+      </div>
       <p class="fig-group">Reading the neurons with the O-lens</p>
       <figure class="fig">
         <h3>Zeroing a behavior's top-100 neurons lowers what the O-lens reads as the behavior; pushing them the other way raises it, and random changes of the same size barely move it</h3>
@@ -483,18 +498,18 @@ table.ct tr.ref td { background: var(--tint) }
         <tr class="grp"><td colspan="5">Directions</td></tr>
         <tr><td>Assistant Axis, capping<small>Clamp the projection at the 25th percentile of benign chat, layers 46–53</small></td>
           <td>Weak. Prompt rate: rank correlation −0.18 at block 48; within a reply, inside the random-direction nulls.</td>
-          <td>Denying AI 33% → 24%, claiming a body 41% → 34% (not significant), laser unchanged. Beats all 5 control caps; short of the −50% bar.</td>
-          <td>0.0004 nats/token; 160/160 identity answers still say AI</td>
-          <td>~2.8 A100-hours (with steering)</td></tr>
+          <td>Denying AI 33% → 24%, claiming a body 41% → 34% (not significant), laser unchanged; beats all 5 control caps. Strongest cap within 0.02 nats/token (50th percentile, layers 40–59): denying AI 35% → 17.5%, claiming a body 47.5% → 19%, which is 20% and 48% of the clean rate beyond 3 control caps. Short of the −50% bar.</td>
+          <td>0.0004 nats/token, 0.020 at the strongest cap; 160/160 identity answers still say AI; laser rises under every cap, controls included</td>
+          <td>~2.8 A100-hours (with steering); ~3.9 GPU-hours for the dose sweep, role and sycophancy caps</td></tr>
         <tr><td>Assistant Axis, steering<small>Add the axis at block 32</small></td>
           <td class="no">–</td>
           <td>Moves the identity behaviors the predicted way; laser and drunk driving do not move, cutting moves the opposite way.</td>
           <td>&gt; 0.02 nats/token at every dose, about 10× a random direction</td>
           <td class="no">included above</td></tr>
-        <tr><td>Persona trait vectors<small>Project onto evil, sycophantic, hallucinating and 6 other vectors</small></td>
+        <tr><td>Persona trait and role vectors<small>Project onto evil, sycophantic, hallucinating and 6 other vectors; cap sycophantic, or the best-matched of 265 role directions</small></td>
           <td>Evil and hallucinating predict prompt rates about as well as the axis. The drunk-driving direction aligns with sycophantic and optimistic.</td>
-          <td class="no">Not tested</td>
-          <td class="no">–</td>
+          <td>Sycophancy cap: drunk driving 25% → 16%, below all 5 control caps but on discovery prompts only; claiming a body and laser move no more than under the control caps. Teenager cap: denying AI 35% → 17.5%, no better than the axis cap; actor cap acts like the axis.</td>
+          <td>Sycophancy cap 0.016 nats/token; teenager 0.026, over the limit, and raises laser</td>
           <td class="no">included above</td></tr>
         <tr><td>Weird-vs-normal directions<small>Difference of means between weird and normal replies to the same prompt</small></td>
           <td>Among the best internal monitors, still below the transcript. AUROC .55 on matched continuations (text judge .56; 4 tokens in); +.08 corrected across cut points (text judge +.13), beyond all 200 random directions and 100 label shuffles; adds nothing to the text judge. On whole replies the direction separates weird from normal at AUROC .66–.95 depending on the behavior.</td>
