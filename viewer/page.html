@@ -194,19 +194,72 @@ table.t tr.ctrl td { color: var(--faint) }
 .foot { font-size: 12.5px; color: var(--faint) }
 .foot b { color: var(--muted); font-weight: 600 }
 
-/* readouts */
-.kv2 { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 6px }
-.rd-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: 16px 0 4px; font-size: 12.5px; color: var(--muted) }
-.rd-head .seg button { padding: 3px 10px; font-size: 12px }
-.rd { border-top: 1px solid var(--rule); padding: 8px 0 }
-.rd-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-size: 11.5px; color: var(--faint); margin-bottom: 3px }
-.rd-meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums }
-.rd-text { font: 13.5px/1.5 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 10.5em; overflow: auto; scrollbar-width: thin }
-.sec h5 { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 2px }
-.plens { margin-top: 12px; max-width: 78ch }
-.plens summary { cursor: pointer; font-size: 12.5px; color: var(--muted) }
+/* token panel tabs */
+.ptabs { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: 1fr 1fr; background: var(--tint); border-bottom: 1px solid var(--rule) }
+.ptabs button { appearance: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; padding: 12px 10px 10px;
+  font: 500 13.5px var(--sans); color: var(--muted); cursor: pointer }
+.ptabs button + button { border-left: 1px solid var(--rule) }
+.ptabs button:hover { color: var(--ink) }
+.ptabs button[aria-selected="true"] { color: var(--ink); background: var(--sheet); border-bottom-color: var(--accent) }
+.linkbtn:disabled { opacity: .45; cursor: default }
+.readnav .foot b { color: var(--accent); font-weight: 600 }
+.readnav .actions, .readnav + .actions { margin-top: 10px }
+.sec-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px }
+.sec-head h4 { margin: 0 }
+.sec-head .seg button { padding: 3px 9px; font-size: 12px }
+.s { font-size: 11.5px; color: var(--faint); line-height: 1.4; margin: 3px 0 0 }
+
+/* how each signal rates this point */
+.glance { display: grid; grid-template-columns: minmax(0, 10.5em) minmax(0, 1fr) 3em; gap: 0 10px; align-items: center; font-size: 13px }
+.glance .k, .ax-head .k { font-weight: 500 }
+.glance .b, .cond .b { height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden }
+.glance .b i, .cond .b i { display: block; height: 100%; border-radius: 4px }
+.glance .v, .ax-head .v, .cond .v { font: 500 12.5px var(--mono); text-align: right; font-variant-numeric: tabular-nums }
+.glance .s { grid-column: 1 / -1; margin: 1px 0 11px }
+.ax-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding-top: 11px; border-top: 1px dashed var(--rule-2) }
+.gauge { position: relative; height: 22px; margin-top: 4px }
+.gauge .track, .gauge .below { position: absolute; left: 0; top: 7px; height: 8px; border-radius: 4px }
+.gauge .track { right: 0; background: var(--bar) }
+.gauge .below { background: color-mix(in srgb, var(--cool) 24%, transparent); border-radius: 4px 0 0 4px }
+.gauge .mk { position: absolute; top: 3px; height: 16px; border-left: 1px solid var(--faint) }
+.gauge .mk.cap { border-left: 1.5px dashed var(--ok) }
+.gauge .mk.mu { border-left-style: dotted }
+.gauge .dot { position: absolute; top: 4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ink); border: 2.5px solid var(--sheet) }
+.gauge-labels { position: relative; height: 15px; font: 10.5px var(--sans); color: var(--faint) }
+.gauge-labels span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap }
+.gauge-labels .l { transform: translateX(calc(-100% - 4px)); color: var(--ok) }
+.gauge-labels .r { transform: translateX(4px) }
+
+/* what the O-lens reads */
+.conds { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px }
+.cond { appearance: none; border: 0; background: none; border-radius: 8px; padding: 6px 8px; display: grid; grid-template-columns: minmax(0, 10.5em) minmax(0, 1fr) 2.4em;
+  gap: 10px; align-items: center; text-align: left; font: 13px var(--sans); color: var(--muted); cursor: pointer }
+.cond:hover { background: var(--tint); color: var(--ink) }
+.cond[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 500 }
+.cond .b i { background: var(--accent) }
+.cond-cap { font-size: 12.5px; color: var(--muted); margin: 14px 0 8px; line-height: 1.45 }
+.cond-cap b { color: var(--ink); font-weight: 600 }
+.rd { margin: 0; padding: 10px 12px; background: var(--tint); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0 }
+.rd + .rd { margin-top: 8px }
+.rd-text { font: 13.5px/1.5 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere }
+.rd-meta { font-size: 11.5px; color: var(--faint); margin-top: 6px; font-variant-numeric: tabular-nums }
+.rd-meta b { color: var(--ink); font-weight: 600 }
+.plens summary { cursor: pointer; font: 500 13px var(--sans); color: var(--muted) }
 .plens summary:hover { color: var(--ink) }
-.plens .rd:first-of-type { margin-top: 8px }
+.plens[open] .s { margin-bottom: 10px }
+
+/* chart legend keys and read positions in the reply */
+.chart-legend { margin: -4px 0 12px }
+.legend .lg { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; align-items: center }
+.legend .lg b { font: 600 10.5px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--faint) }
+.sw.bar, .sw.dot { background: var(--c) }
+.sw.ln { width: 16px; height: 2px; border-radius: 1px; background: var(--c); vertical-align: 3px }
+.sw.dash { width: 16px; height: 0; border-top: 2px dashed var(--c); border-radius: 0; vertical-align: 3px }
+.sw.dot, .sw.ring { width: 8px; height: 8px; border-radius: 50%; vertical-align: 0 }
+.sw.ring { border: 1.5px solid var(--c) }
+.reply.lensview .tok.read { box-shadow: inset 0 -2px 0 var(--accent) }
+.reply.chips.lensview .tok.read { border-bottom: 2px solid var(--accent); box-shadow: none }
+.readkey { text-decoration: underline solid var(--accent) 2px; text-underline-offset: 4px }
 .methods-sep { padding: 0; margin-left: 10px; height: 22px; align-self: center }
 
 /* methods compared */
@@ -258,7 +311,7 @@ table.ct tr.ref td { background: var(--tint) }
   <header>
     <p class="eyebrow">Qwen3.6-27B · WeirdChat · thinking off</p>
     <h1>Finding Neurons That Turn Qwen Weird</h1>
-    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, how much each token depends on the mediator neurons, and what the O-lens and the Assistant Axis read at each token. The last tab compares these methods.</p>
+    <p class="dek">Replies that turn weird, one token at a time. Each reply shows the measured chance it ends up weird given the text so far, the token where that chance jumps, and how much each token depends on the mediator neurons. Switch to “O-lens &amp; Assistant Axis” above the chart or in the token panel to see what those two methods read at each token. The last tab compares all the methods.</p>
   </header>
   <section>
     <nav class="behaviors" id="tabs" aria-label="Behavior"></nav>
@@ -279,10 +332,12 @@ table.ct tr.ref td { background: var(--tint) }
         <label class="field" for="reply-select">Reply<select id="reply-select"></select></label>
         <label class="field" for="mode-select">Highlight tokens by<select id="mode-select"></select></label>
       </div>
-      <section class="block"><div class="chat" id="chat"></div><p class="prompt-meta" id="prompt-meta"></p><details class="plens" id="prompt-lens" hidden></details></section>
+      <section class="block"><div class="chat" id="chat"></div><p class="prompt-meta" id="prompt-meta"></p></section>
       <section class="block verdict" id="verdict"></section>
       <section class="block">
-        <div class="block-head"><h3>Along the reply</h3><div class="legend" id="chart-legend"></div></div>
+        <div class="block-head"><h3>Along the reply</h3>
+          <div class="seg" role="group" aria-label="Methods shown in the chart and the token panel" id="chart-view"><button type="button" data-p="neurons">Neurons</button><button type="button" data-p="lens">O-lens &amp; Assistant Axis</button></div></div>
+        <div class="legend chart-legend" id="chart-legend"></div>
         <svg id="chart" role="img" aria-label="Chance of turning weird and neuron-set support along the reply"></svg>
         <p class="chart-hint" id="chart-hint"></p>
       </section>
