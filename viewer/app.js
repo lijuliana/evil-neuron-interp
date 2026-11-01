@@ -619,7 +619,7 @@ function lensPanel(rep, j) {
 let CMP = null;
 async function renderCompare() {
   if (!CMP) CMP = await getJSON('compare.json');
-  figWithin(); figFork(); figDirs(); figStop(); figAbl(); figNlab(); figShared();
+  figMon(); figFork(); figDirs(); figStop(); figAbl(); figNlab(); figShared();
 }
 const figW = id => Math.max(320, Math.round($(id).clientWidth || $(id).parentNode.clientWidth || 640));
 const tx = (x, y, t, cls = '', anchor = 'start') => `<text x="${x}" y="${y}"${cls ? ` class="${cls}"` : ''} text-anchor="${anchor}">${t}</text>`;
@@ -631,6 +631,43 @@ const dot = (x, y, c, title, shape = 'circle', hollow = false) => {
 };
 const sgn = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`;
 function setSVG(id, W, H, g) { const svg = $(id); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H); svg.innerHTML = g; }
+
+// Eval A: every monitor on the same two tests. Left: within-cut AUROC on matched weird / normal continuations of the
+// same prefix (k = 4). Right: position-corrected partial rank correlation with P(weird) across a reply's cut points.
+function figMon() {
+  const id = 'fig-mon', M = CMP.mon;
+  if (!M) { $(id).closest('figure').hidden = true; return; }
+  const W = figW(id), narrow = W < 560;
+  const ref = M.rows.find(r => r.grp === 'ref'), rows = M.rows.filter(r => r.grp !== 'ref');
+  const short = l => l.replace(/, block \d+/, '').replace('Weird-vs-normal direction', 'Weird-vs-normal dir.').replace("Model's own top-20 next tokens", 'Model top-20 tokens').replace('Random SAE features (control)', 'Random SAE features').replace('SAE sparse probe, 16 features', 'SAE probe, 16 feat.');
+  const labW = narrow ? 126 : Math.min(230, Math.round(W * 0.33)), gap = 34, pw = narrow ? W - labW - 20 : (W - labW - 10 - gap - 10) / 2;
+  const rh = narrow ? 21 : 24, top = 30, groups = [...new Set(rows.map(r => r.grp))];
+  const lines = []; groups.forEach(gname => { lines.push({ head: gname }); rows.filter(r => r.grp === gname).forEach(r => lines.push(r)); });
+  const blockH = top + lines.length * rh + 46;  // one panel incl. its axis labels
+  const P = [
+    { key: 'auroc', lo: 0.46, hi: 0.64, ticks: [0.5, 0.55, 0.6], fmt: v => v.toFixed(2), chance: 0.5, refv: ref?.auroc?.[0], title: narrow ? 'Weird vs normal continuation (AUROC)' : 'Weird vs normal continuation of the same prefix (AUROC)', foot: ref?.auroc ? `text judge ${ref.auroc[0].toFixed(2)} · chance 0.5 · best possible ${M.ceil.toFixed(2)}` : '' },
+    { key: 'partial', lo: -0.12, hi: 0.2, ticks: [-0.1, 0, 0.1, 0.2], fmt: s1, chance: 0, refv: ref?.partial?.[0], title: narrow ? 'Tracks P(weird) across cut points (corrected)' : 'Tracks P(weird) across a reply’s cut points (corrected)', foot: ref?.partial ? `text judge ${sgn(ref.partial[0])}` : '' }];
+  let g = '';
+  P.forEach((p, pi) => {
+    const x0 = labW + 10 + (narrow ? 0 : pi * (pw + gap)), t0 = top + (narrow ? pi * blockH : 0), bot = t0 + lines.length * rh;
+    const x = v => x0 + pw * (Math.max(p.lo, Math.min(p.hi, v)) - p.lo) / (p.hi - p.lo);
+    g += tx(narrow ? 0 : x0 + pw / 2, t0 - 18, p.title, 'ptitle', narrow ? 'start' : 'middle');
+    g += p.ticks.map(t => ln(x(t), t0, x(t), bot + 4, t === p.chance ? '--faint' : '--rule', t === p.chance ? '' : 'stroke-dasharray="2 4"') + tx(x(t), bot + 18, p.fmt(t), '', 'middle')).join('');
+    if (p.refv != null) g += ln(x(p.refv), t0, x(p.refv), bot, '--muted', 'stroke-dasharray="5 3" stroke-width="1.3"') + tx(x(p.refv) + 4, t0 + 10, 'text judge', 'dl', 'start');
+    lines.forEach((r, k) => {
+      const yc = t0 + k * rh + rh / 2;
+      if (r.head) { if (narrow || pi === 0) g += tx(0, yc + 4, esc(r.head), 'lab all'); g += ln(narrow || pi === 0 ? 0 : x0, yc + rh / 2, x0 + pw, yc + rh / 2, '--rule-2'); return; }
+      if (narrow || pi === 0) g += tx(0, yc + 4, esc(narrow ? short(r.lab) : r.lab), `lab${narrow ? ' s' : ''}`);
+      const v = r[p.key]; if (!v || v[0] == null) { g += tx(x(p.chance) + 4, yc + 4, 'not run', 'n'); return; }
+      const c = r.grp === 'Neurons' ? '--hot' : r.grp === 'Baselines' ? '--faint' : r.grp === 'Readouts' ? '--accent' : '--ok';
+      g += ln(x(v[1]), yc, x(v[2]), yc, c, 'stroke-width="1.4" stroke-opacity="0.55"');
+      const f = p.key === 'auroc' ? (u => u.toFixed(2)) : sgn;
+      g += dot(x(v[0]), yc, c, `${esc(r.lab)}: ${f(v[0])} [${f(v[1])}, ${f(v[2])}]${p.key === 'auroc' && r.sharp != null ? `; sharp forks ${r.sharp.toFixed(2)}, other cuts ${r.other.toFixed(2)}` : ''}`, r.grp === 'Baselines' ? 'square' : 'circle', r.grp === 'Baselines');
+    });
+    if (p.foot) g += tx(x0 + pw, bot + 40, p.foot, 'axt', 'end');
+  });
+  setSVG(id, W, narrow ? 2 * blockH : blockH, g);
+}
 
 function figWithin() {
   const id = 'fig-within', W = figW(id), d = CMP.within, T = CMP.titles;

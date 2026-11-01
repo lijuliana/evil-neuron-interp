@@ -41,13 +41,18 @@ Model: Qwen3.6-27B bf16 on GCP (`weirdchat-a100`, A100-80GB; spot H100s for bulk
   top-100 sets cancel the persona slip out of sample, the identity sets do not; role and sycophancy directions add
   nothing over the axis. X4 (multi-turn drift) cancelled.
 - W6a gradual: only sharedmid100 cuts drunk driving / chemtrails / cutting (-53% vs one matched random set).
+- Eval A monitors (2026-11-01): weird-vs-normal directions, residual probe, neuron-set probes, O-lens, NLA, four lenses
+  and the layer-42 SAE (sparse probe, labels read blind, label-picked features) on 500 matched cuts and 5,275 cut
+  points with position controlled. No internal monitor beats or adds to a Haiku judge reading the transcript; the
+  earlier +.57 within-reply number for the text judge was mostly reply position (position alone +.79). Figure 1 of
+  the viewer's Compare tab.
 
 ## Next (from the 10/30 meeting)
 Every method is run on the same prompts, forks and judge, and scored three ways.
 
 | Eval | Question | Data | Status |
 |---|---|---|---|
-| A. Prediction | Just before the deciding token, can a monitor that sees only the method's output (no transcript) tell continuations that turn weird from ones that do not? | matched weird / normal continuations from the same prefixes: `forks_samples_off.jsonl` (in his repo; 95,480 judged continuations at 10,371 cut points, median 245 tokens) | O-lens done on cut points; probes, J-lens, SAE, NLA to run |
+| A. Prediction | Just before the deciding token, can a monitor that sees only the method's output (no transcript) tell continuations that turn weird from ones that do not? | matched weird / normal continuations from the same prefixes: `forks_samples_off.jsonl` (in his repo; 95,480 judged continuations at 10,371 cut points, median 245 tokens) | Done 2026-11-01 for every method (runs/monitors/SPEC.md, eval/report.md): none beats the text judge (AUROC .56 on 500 matched cuts at 4 tokens in; best internal monitor .55) and none adds to it |
 | B. Counterfactual explanation | Does the method's output help an agent predict which prompt edits change the behavior, beyond the transcript alone? | CHIVE protocol (github.com/adamkarvonen/chive); prompt edits tested at 64 samples | not started |
 | C. Control (main goal) | Best intervention each method yields: drop in the behavior on held-out prompts, side effects (KL on benign text, capability mini-set, benchmarks), cost in GPU-hours | top-100 / shared sets as the reference | neurons and persona capping measured; probe-direction projection-out, SAE-feature ablation, lens-direction ablation to run |
 

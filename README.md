@@ -6,6 +6,31 @@ Token viewer: https://lijuliana.github.io/weirdchat-neuron-interp/
 
 ## Comparisons to other interp methods
 
+### Every method as a monitor (eval A)
+
+**No internal monitor beats a Haiku judge reading the transcript at warning that a reply will turn weird, and none adds to it significantly after correction (the NLA and O-lens readouts add +.02 to +.06 before correction).** Spec: `runs/monitors/SPEC.md`; tables: `runs/monitors/eval/report.md`; Figure 1 of the viewer's Compare tab.
+
+Setup: every method reads the same states in the same 410 weird replies and must score each position from its own output alone (readouts are scored 0-100 by a blind Haiku 5.5 judge that never sees the transcript). Two tests. (b) 500 cut points where sampled continuations of the identical prefix split into weird and normal: within-cut AUROC at 4 tokens in, chance 0.5, best possible 0.87 given shared opening tokens. (a) 5,275 interior cut points vs measured P(weird | prefix): within-reply partial rank correlation with the position trend removed and each monitor compared with its own shuffled null. 5-fold cross-validation grouped by prompt pattern for every fit.
+
+| Monitor | (b) AUROC | (a) corrected correlation |
+|---|---|---|
+| Text judge (reference) | .56 [.54, .58] | +.13 [+.09, +.16] |
+| Weird-vs-normal direction, block 48 | .55 [.53, .57] | +.08 [+.05, +.10] |
+| Own top-100 neurons (in-sample; 5 behaviors, 278 cuts) | .55 [.52, .58] (text judge .60 on these cuts) | +.10 [+.06, +.14] (text judge +.16 on these replies) |
+| Residual probe (layer by inner CV, mostly block 48) | .53 [.51, .54] | +.07 [+.04, +.12] |
+| O-lens, block 44 | .56 [.54, .59] | +.07 [+.05, +.10] |
+| NLA, block 44 | .54 [.52, .57] | +.09 [+.06, +.12] |
+| J-lens / J++ / R-lens / template, block 44 | .54 / .52 / .53 / .51 | +.04 / +.03 / +.02 / +.02 |
+| SAE labels read blind (random features) | .54 (.49) | +.03 (−.03) |
+| SAE sparse probe, 16 features | .52 | +.06 |
+| Model's own top-20 next tokens | .50 | +.01 |
+
+- Gain over the text judge (out-of-fold combination): on matched continuations every pre-declared primary's interval includes 0. On cut points the two verbalizers add a little (NLA +.04 [+.01, +.07], O-lens +.02 [+.00, +.04]; the exploratory NLA block 32 +.06 on cut points and +.01 on continuations), not significant after Holm correction over the 40 pre-declared tests.
+- The text judge's signal sits at the 34 sharp forks (.85), where the fork token is already written; elsewhere .54.
+- The earlier within-reply Spearman of +.57 for the text judge is mostly reply position: position alone gives +.83 on the same rows (+.79 vs the text judge's +.51 on the interior cuts).
+- Own neurons: selected at these forks; on held-out prompts the set probe correlates −.31 with the prompt's rate.
+- NLA and SAE were trained on web text and fit our chat states worse (NLA reconstruction 39-48% vs 64-79% of variance; SAE 59% vs 70%).
+
 ### O-lens
 
 **The O-lens reads out the words the model is about to write. It adds nothing to a text-only judge for predicting weird turns, but it does register neuron ablations.**
@@ -13,7 +38,7 @@ Token viewer: https://lijuliana.github.io/weirdchat-neuron-interp/
 Setup: `s3d_rl600` at layers 32/44/56, 2 readouts per position, each scored 0-10 for the behavior by a blind Haiku judge; the comparison is a Haiku judge reading only the transcript up to the same point.
 
 1. **No predictive value beyond the text.**
-   - Within-reply Spearman with P(weird | prefix) over 6,095 cut points: lens -0.08 to 0.00 at every layer; text judge +0.57.
+   - Within-reply Spearman with P(weird | prefix) over 6,095 cut points: lens -0.08 to 0.00 at every layer; text judge +0.57 (mostly reply position; see eval A above for the position-controlled numbers).
    - Adding the lens to the text judge: +0.01 [-0.00, +0.02] (5-fold CV grouped by prompt); at the last prompt token, -0.02 [-0.11, +0.07] on 183 held-out prompts.
 2. **The pre-fork signal is next-word prediction and shows up equally in plain documents.**
    - Before the 46 sharp forks the lens score rises +1.9 [+0.9, +2.9] (L56, 0-10) while measured P(weird) is still 0.18 and the text judge is flat (+0.05).

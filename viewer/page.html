@@ -292,6 +292,7 @@ table.ct tr.ref td { background: var(--tint) }
 .fig svg text { font: 11px var(--sans); fill: var(--faint); font-variant-numeric: tabular-nums }
 .fig svg .lab { font-size: 12.5px; fill: var(--ink) }
 .fig svg .lab.all { font-weight: 600 }
+.fig svg .lab.s { font-size: 10.5px }
 .fig svg .n { font-size: 11px; fill: var(--faint); font-weight: 400 }
 .fig svg .grp { font: 600 13px var(--sans); fill: var(--ink) }
 .fig svg .ptitle, .fig svg .dl { paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; stroke-linejoin: round }
@@ -402,10 +403,10 @@ table.ct tr.ref td { background: var(--tint) }
     <div class="figs" id="compare-figs">
       <p class="fig-group">Warning before the weird turn</p>
       <figure class="fig">
-        <h3>Within a reply, only the text judge tracks the measured chance of weird</h3>
-        <div class="legend"><span><i class="sw dot" style="--c:var(--muted)"></i>Text judge</span><span><i class="sw dot" style="--c:var(--accent)"></i>O-lens, layer 56</span><span><i class="sw sq" style="--c:var(--cool)"></i>Assistant Axis, block 48</span></div>
-        <svg id="fig-within" role="img" aria-label="Rank correlation of each signal with the measured chance of weird, by behavior"></svg>
-        <figcaption><b>Figure 1.</b> For each weird reply, the rank correlation between a signal and the measured chance that the reply ends weird, taken across the reply's cut points (about 15 per reply) and averaged over replies. Lines are 95% intervals over replies; the number after each behavior is its count of replies. Text judge: Haiku reading only the transcript so far. O-lens: blind behavior score of the readouts. Assistant Axis: sign flipped, so a state further from the default assistant counts as weirder. 0 means no relation.</figcaption>
+        <h3>No internal monitor beats a judge reading the transcript at warning that a reply will turn weird</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--hot)"></i>Neurons</span><span><i class="sw dot" style="--c:var(--ok)"></i>Directions and probes</span><span><i class="sw dot" style="--c:var(--accent)"></i>Readouts scored blind</span><span><i class="sw sq" style="--c:var(--faint)"></i>Baselines</span><span><i class="sw dash" style="--c:var(--muted)"></i>Text judge</span></div>
+        <svg id="fig-mon" role="img" aria-label="Each monitor's AUROC on matched continuations and its corrected correlation with the chance of weird across cut points"></svg>
+        <figcaption><b>Figure 1.</b> Every method read the model's state at the same positions in the same replies, and its output alone, never the transcript, had to say whether the reply would turn weird. <b>Left:</b> 500 cut points where some of the sampled continuations of the identical prefix turned weird and others did not. Each monitor reads the state 4 tokens into each continuation; the score is the share of (weird, normal) pairs it orders correctly, 0.5 is chance, and shared opening tokens cap the best possible score at 0.87. <b>Right:</b> across the 5,275 cut points inside the 410 weird replies, how well a monitor tracks the measured chance that the reply ends weird, with the trend over position removed and each monitor compared with its own shuffled null (0 means no signal). Lines are 95% intervals over prompt patterns. Readouts (O-lens, NLA, lenses, SAE labels) are text or token lists scored 0 to 100 by Haiku 5.5, which never saw the transcript. Probes and directions never saw the prompt they are scored on. Own top-100 neurons were selected at these same forks, so their result is in-sample.</figcaption>
       </figure>
       <figure class="fig">
         <h3>Near a fork, the O-lens rises a few tokens early, and just as much when the same words are read as a plain document</h3>
@@ -454,12 +455,12 @@ table.ct tr.ref td { background: var(--tint) }
       <tbody>
         <tr class="grp"><td colspan="5">Neurons</td></tr>
         <tr><td>Own top-100 neurons<small>Zero each behavior's 100 neurons ranked by attribution at its forks</small></td>
-          <td class="no">Not tested yet (set activation as a monitor)</td>
+          <td>Weak, and in-sample. A probe on the set's 100 activations orders weird vs normal continuations at AUROC .55 on its 278 cuts (the text judge gets .60 there), and the correlation with P(weird) across a reply's cut points is +.10 after the position trend is removed (text judge +.16 on the same replies). Beats 49 of 50 random sets of the same shape; on held-out prompts it points the wrong way (−.31 with the prompt's rate).</td>
           <td>Held-out prompts: fake code execution 23% → 0%, 911 16% → 0%, laser 23% → 6%, claiming a body 29% → 6%. Denying AI: no held-out effect. Doubling the set induces the behavior on low-rate prompts.</td>
           <td>≤ 0.023 nats/token on unrelated text; MMLU ±1 pt, GSM8K ±0.8 pt</td>
           <td>Attribution at 46 forks, then rate tests</td></tr>
         <tr><td>Shared mid-layer 100<small>Zero 100 neurons from layers 24–47 shared across behaviors</small></td>
-          <td class="no">–</td>
+          <td>No. AUROC .51 on matched continuations; +.05 corrected across cut points, inside the random-set range.</td>
           <td>Lowers all 8 behaviors tested: mean rate 10% vs 21% with a matched random set. Built without a behavior, it still lowers that behavior (8 of 8).</td>
           <td>0.017 nats/token</td>
           <td class="no">–</td></tr>
@@ -470,12 +471,12 @@ table.ct tr.ref td { background: var(--tint) }
           <td class="no">–</td></tr>
         <tr class="grp"><td colspan="5">Readouts</td></tr>
         <tr><td>O-lens<small>Describe the state at each scored token, layers 32/44/56, scored blind by Haiku</small></td>
-          <td>No. Within a reply its score has rank correlation −0.08 to 0.00 with P(weird) (text judge +0.57); adding it to the text judge gains +0.01. Its rise about 8 tokens before a fork is as large when the words are read as a plain document.</td>
+          <td>Matches the transcript on matched continuations (AUROC .56 vs .56; .81 at the sharp forks) and tracks P(weird) across cut points at +.07 corrected (text judge +.13); adds +.02 [+.00, +.04] to the text judge out of fold, not significant after correction. Its rise about 8 tokens before a fork is as large when the words are read as a plain document.</td>
           <td>Not a control method. As a measure it tracks neuron ablation: score −0.90 with the own top-100 zeroed, +0.08 for a random push of the same size.</td>
           <td class="no">–</td>
           <td>~2 H100-hours to read; ~33M Haiku tokens to score</td></tr>
         <tr class="ref"><td>Text judge (reference)<small>Haiku reads only the transcript so far</small></td>
-          <td>Rank correlation +0.57 with P(weird) within a reply; +0.27 with the prompt's rate at the last prompt token</td>
+          <td>The bar: AUROC .56 on matched continuations (.85 at the 34 sharp forks, where the fork token is already written; .54 elsewhere); +.13 corrected across cut points. Its raw within-reply correlation of +.57 is mostly reply position: position alone gives +.83 on the same rows.</td>
           <td class="no">–</td>
           <td class="no">–</td>
           <td>~7M Haiku tokens</td></tr>
@@ -496,14 +497,23 @@ table.ct tr.ref td { background: var(--tint) }
           <td class="no">–</td>
           <td class="no">included above</td></tr>
         <tr><td>Weird-vs-normal directions<small>Difference of means between weird and normal replies to the same prompt</small></td>
-          <td>On whole replies, AUROC: drunk driving .84–.86, chemtrails .85–.88, cutting .72–.78, laser .66–.68 (shuffled labels ≤ .69). Drunk driving is readable from the opening tokens.</td>
+          <td>Among the best internal monitors, still below the transcript. AUROC .55 on matched continuations (text judge .56; 4 tokens in); +.08 corrected across cut points (text judge +.13), beyond all 200 random directions and 100 label shuffles; adds nothing to the text judge. On whole replies the direction separates weird from normal at AUROC .66–.95 depending on the behavior.</td>
           <td class="no">Projecting it out not run yet</td>
           <td class="no">–</td>
           <td>~2.4 A100-hours (with the shared-set test)</td></tr>
-        <tr class="grp"><td colspan="5">Not run yet</td></tr>
-        <tr><td>J-lens<small>Lens weights for this model are on our VM (camilablank/workspace-lenses)</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
-        <tr><td>NLA, layer 42<small>Explanations exist for WeirdChat transcripts (syvb/nla-weirdchat-explanations), not for these replies</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
-        <tr><td>SAE, layer 42<small>ceselder/qwen36-27b-sae-l42-1b</small></td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+        <tr class="grp"><td colspan="5">Other readouts and probes</td></tr>
+        <tr><td>Residual-stream probe<small>Ridge regression from the residual state to P(weird); layer picked by inner cross-validation (mostly block 48), 5-fold over prompt patterns</small></td>
+          <td>AUROC .53 on matched continuations; +.07 corrected across cut points. Does not transfer to a behavior it was not trained on (+.02 leave-one-behavior-out).</td>
+          <td class="no">–</td><td class="no">–</td><td>CPU only</td></tr>
+        <tr><td>J-lens, J++, R-lens, template lens<small>Top-20 tokens or phrases the state points to (camilablank/workspace-lenses, neuronpedia/jacobian-lens), block 44, scored blind by Haiku</small></td>
+          <td>J-lens AUROC .54, R-lens .53, J++ .52, template lens .51; corrected cut-point correlation +.02 to +.04. The model's own top-20 next tokens score .50, so the lenses add a little over the model's own prediction.</td>
+          <td class="no">Not tested</td><td class="no">–</td><td>~3 min H100 to read; ~11M Haiku tokens to score</td></tr>
+        <tr><td>NLA, all layers<small>Natural-language autoencoder (agu18dec/qwen3.6-27b-all-layer-nla-rl2000), block 44, scored blind by Haiku</small></td>
+          <td>AUROC .54 on matched continuations (.78 at the sharp forks); +.09 corrected across cut points, the best readout there, and it adds +.04 [+.01, +.07] to the text judge out of fold, which does not survive the multiple-comparison correction.</td>
+          <td class="no">Not tested</td><td class="no">–</td><td>~1.4 H100-hours to read; ~15M Haiku tokens to score. Reconstructs our chat states much worse than web text (39–48% vs 64–79% of variance). Block 32 with one sample scores a little higher than block 44 on both tests.</td></tr>
+        <tr><td>SAE, block 42<small>131k-feature sparse autoencoder (ceselder/qwen36-27b-sae-l42-1b); features labelled from web and benign-chat examples</small></td>
+          <td>As a probe: AUROC .52, no better than the raw block-42 state, and the features it picks mark sentence boundaries. As labels read by a blind judge: AUROC .54 vs .49 for random features, +.03 corrected across cut points. Features picked from labels alone: .51.</td>
+          <td class="no">Not tested</td><td class="no">–</td><td>0.5 H100-hours; ~17M Haiku tokens for labels and scoring. Explains 59% of the variance of our states vs 70% on web text.</td></tr>
       </tbody>
     </table></div>
     <p class="ct-note">Not yet run for any method: whether its output helps predict which prompt edits change the behavior (a CHIVE-style counterfactual test). Neuron rows come from the fork-and-ablate pipeline (Phase 2); the O-lens, Assistant Axis, persona and direction rows are our runs on the same prompts.</p>

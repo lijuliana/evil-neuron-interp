@@ -15,6 +15,10 @@
           condition, and per behavior at L56; 95% CI over forks.
   nlab    O-lens readouts of neuron output directions (scripts/83-87): out-of-role score of each set's neurons (max over
           the two signs) vs same-layer random neurons; 95% CI over neurons.
+  mon     eval A monitors (runs/monitors/eval, scripts/55): per method its pre-declared variant's within-cut AUROC on
+          the matched continuations (k = 4, 95% CI over patterns, sharp / other cuts), gain over the text judge, and
+          the position-corrected within-reply partial correlation on the interior cut points with its CI; plus the
+          achievable AUROC ceiling and the text-judge reference. Skipped when the tables are missing.
 Same inputs as scripts/89 plus runs/persona_p1/b_proj.npz, runs/persona_p3/analysis.json,
 runs/gradual_g1/{g1_rates.csv,damage.json} and runs/gradual_g2/g2_by_prefix.csv.
 """
@@ -25,6 +29,7 @@ import pandas as pd
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", default="viewer/out_public")
+ap.add_argument("--eval", default="runs/monitors/eval")
 args = ap.parse_args()
 A, R = "data/agastya", "runs/olens"
 rng = np.random.default_rng(0)
@@ -155,10 +160,47 @@ for s_, d in best.groupby("set"):
     dd = np.percentile([rng.choice(a, len(a)).mean() - rng.choice(r, len(r)).mean() for _ in range(1000)], [2.5, 97.5])
     nlab[s_.replace("top10|", "")] = {"set": bt(a), "rand": bt(r), "diff": [r3(a.mean() - r.mean()), r3(dd[0]), r3(dd[1])]}
 
+# eval A monitors (scripts/55 tables)
+MON = [  # (monitor key in the eval tables, label, group)
+    ("text_b:text", "Text judge (transcript only)", "ref"),
+    ("m4:own_top100", "Own top-100 neurons", "Neurons"), ("m4:sharedmid100", "Shared mid-layer 100", "Neurons"),
+    ("m2:fold_on_whole_L48", "Weird-vs-normal direction, block 48", "Directions and probes"),
+    ("m3:pooled", "Residual-stream probe", "Directions and probes"),
+    ("m6a:k16", "SAE sparse probe, 16 features", "Directions and probes"),
+    ("olens:L44|behavior", "O-lens, block 44", "Readouts"), ("nla:L44|behavior", "NLA, block 44", "Readouts"),
+    ("jlens:L44|behavior", "J-lens, block 44", "Readouts"), ("jpp:L44|behavior", "J++ lens, block 44", "Readouts"),
+    ("rlens:L44|behavior", "R-lens, block 44", "Readouts"), ("template:L44|behavior", "Template lens, block 44", "Readouts"),
+    ("m6b:L42|behavior", "SAE feature labels, block 42", "Readouts"),
+    ("m6b_rand:L42|behavior", "Random SAE features (control)", "Baselines"),
+    ("b4:final|behavior", "Model's own top-20 next tokens", "Baselines"), ("b2:surprisal_last", "Surprisal of the last token", "Baselines")]
+mon = None
+try:
+    tb = pd.read_csv(f"{args.eval}/table_b.csv"); ta = pd.read_csv(f"{args.eval}/table_a.csv")
+    tb = tb[(tb.set == "b") & (tb.k == 4)].set_index("monitor"); ta = ta.set_index("monitor")
+    f3 = lambda v: None if pd.isna(v) else round(float(v), 3)
+    mon = {"ceil": f3(tb.ceil_best.iloc[0]), "rows": []}
+    for key, lab, grp in MON:
+        akey = "text_a:text" if key == "text_b:text" else key
+        if key not in tb.index and akey not in ta.index:
+            continue
+        b_ = tb.loc[key] if key in tb.index else None
+        a_ = ta.loc[akey] if akey in ta.index else None
+        mon["rows"].append({"id": key, "lab": lab, "grp": grp,
+                            "auroc": [f3(b_.auroc), f3(b_.auroc_lo), f3(b_.auroc_hi)] if b_ is not None else None,
+                            "sharp": f3(b_.auroc_sharp) if b_ is not None else None, "other": f3(b_.auroc_nonsharp) if b_ is not None else None,
+                            "gain_b": [f3(b_.gain), f3(b_.gain_lo), f3(b_.gain_hi)] if b_ is not None and not pd.isna(b_.gain) else None,
+                            "partial": [f3(a_.partial), f3(a_.partial_lo), f3(a_.partial_hi)] if a_ is not None else None,
+                            "null": f3(a_.partial_null) if a_ is not None else None,
+                            "gain_a": [f3(a_.gain), f3(a_.gain_lo), f3(a_.gain_hi)] if a_ is not None and not pd.isna(a_.gain) else None,
+                            "holm_b": f3(b_.p_holm_main) if b_ is not None and str(b_.status).startswith("primary") else None})
+except FileNotFoundError as e:
+    print("mon: skipped,", e)
+
 titles = {b["id"]: b["title"] for b in json.load(open(f"{args.out}/index.json"))["behaviors"]}
 json.dump({"titles": titles, "within": within, "fork": fork, "stop": stop, "axis": {"tau": 8.52, "mu": 11.13},
-           "dirs": dirs, "shared": shared, "abl": abl, "nlab": nlab},
+           "dirs": dirs, "shared": shared, "abl": abl, "nlab": nlab, "mon": mon},
           open(f"{args.out}/compare.json", "w"), separators=(",", ":"))
+if mon: print("mon:", [(r["id"], r["auroc"] and r["auroc"][0], r["partial"] and r["partial"][0]) for r in mon["rows"]])
 print("within all:", within["all"])
 for b, v in within.items(): print(f"  {b:30s}", {k: x[0] for k, x in v.items()}, "n", v["text"][3])
 print("fork P:", fork["P"])
