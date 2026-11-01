@@ -186,6 +186,9 @@ select:hover { border-color: var(--faint) }
 .rows .b.div::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--faint) }
 .rows .v { font: 12.5px var(--mono); text-align: right; font-variant-numeric: tabular-nums }
 .rows .lab { grid-column: 1 / -1; font: 11.5px var(--mono); color: var(--faint); margin: -3px 0 4px; overflow-wrap: anywhere }
+.rows .ol { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; color: var(--muted); margin: -4px 0 6px; overflow-wrap: anywhere }
+.rows .ol b { font: 600 10px var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin-right: 6px }
+.rows .ol span { color: var(--faint); white-space: nowrap }
 table.t { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums }
 table.t th { font: 500 11.5px var(--sans); color: var(--muted); text-align: right; padding: 0 4px 7px; border-bottom: 1px solid var(--rule-2) }
 table.t td { text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--rule) }
@@ -301,6 +304,14 @@ table.ct tr.ref td { background: var(--tint) }
 .fig figcaption { font-size: 12.5px; color: var(--muted); line-height: 1.5; max-width: 95ch; text-wrap: pretty }
 .fig figcaption b { color: var(--ink); font-weight: 600 }
 .sw.sq { width: 8px; height: 8px; border-radius: 1.5px; background: var(--c) }
+.fig-group { margin: 14px 0 -18px; padding-top: 14px; border-top: 1px solid var(--rule-2); font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint) }
+.fig-group:first-child { margin-top: 0; padding-top: 0; border-top: 0 }
+.fig-ex { font-size: 12.5px; color: var(--muted); max-width: 95ch }
+.fig-ex p { margin: 0 0 4px; font-weight: 600; color: var(--ink) }
+.fig-ex ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px }
+.fig-ex b { font-weight: 500; color: var(--ink) }
+.fig-ex .nid { font: 11.5px var(--mono); color: var(--faint) }
+.fig-ex .sc { color: var(--faint); white-space: nowrap }
 .ct-head { font: 500 19px/1.3 var(--serif); margin: 10px 0 0; padding-top: 22px; border-top: 1px solid var(--rule) }
 
 /* method */
@@ -385,6 +396,7 @@ table.ct tr.ref td { background: var(--tint) }
     <h2>Neurons against other interpretability methods</h2>
     <p>Each method is scored on the same prompts and replies: does it warn before a reply turns weird, can it stop the behavior, and what does that cost the rest of the model. Rates are judged by Gemma 4 31B with WeirdChat's prompt; P(weird) comes from 8 to 24 resampled continuations per cut.</p>
     <div class="figs" id="compare-figs">
+      <p class="fig-group">Warning before the weird turn</p>
       <figure class="fig">
         <h3>Within a reply, only the text judge tracks the measured chance of weird</h3>
         <div class="legend"><span><i class="sw dot" style="--c:var(--muted)"></i>Text judge</span><span><i class="sw dot" style="--c:var(--accent)"></i>O-lens, layer 56</span><span><i class="sw sq" style="--c:var(--cool)"></i>Assistant Axis, block 48</span></div>
@@ -398,10 +410,43 @@ table.ct tr.ref td { background: var(--tint) }
         <figcaption><b>Figure 2.</b> The 46 sharp forks, aligned at the fork token: position 0 is the state that chooses it, +1 the state after it is written. The measured chance of weird comes from 24 fresh continuations on each side of the fork token, judged with thinking on; the text judge only rises once the token is written. The Assistant Axis stays below the capping threshold throughout and moves little at the fork. Bands are 95% intervals over forks.</figcaption>
       </figure>
       <figure class="fig">
+        <h3>Before the reply starts, every signal predicts a prompt's weird rate only weakly</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--muted)"></i>Text judge</span><span><i class="sw dot" style="--c:var(--accent)"></i>O-lens</span><span><i class="sw sq" style="--c:var(--cool)"></i>Assistant Axis, block 48</span><span><i class="sw sq" style="--c:var(--ctrl)"></i>Persona trait vectors, block 48</span><span><i class="sw dot" style="--c:var(--ink)"></i>Rates judged with thinking on</span><span><i class="sw ring" style="--c:var(--ink)"></i>with thinking off</span></div>
+        <svg id="fig-prompt" role="img" aria-label="Rank correlation of each signal at the last prompt token with the prompt's weird rate"></svg>
+        <figcaption><b>Figure 3.</b> Each signal is read at the last prompt token and compared with the share of the prompt's 64 replies judged weird. The rank correlation is computed within each behavior and averaged over the 10 behaviors with at least 8 prompts (403 prompts), so differences in base rate between behaviors do not count. Filled marks use rates from the judge with thinking on, hollow marks from the same judge with thinking off; the two settings order the signals differently, so no gap between signals is reliable. Lines are 95% intervals from resampling prompts within behavior. Text judge: Haiku reading only the prompt. The axis sign is flipped as in Figure 1. The trait vectors come from the same community release as the axis. In an earlier test on 183 held-out prompts, adding the O-lens scores to the text judge changed the rank correlation by −0.02 [−0.11, +0.07].</figcaption>
+      </figure>
+      <figure class="fig">
+        <h3>A weird-vs-normal direction separates weird from normal replies to the same prompt, early for drunk driving and later or weakly for the others</h3>
+        <div class="legend"><span><i class="sw ln" style="--c:var(--ok)"></i>AUROC of the direction</span><span><i class="sw dash" style="--c:var(--faint)"></i>95th percentile with weird/normal labels shuffled</span></div>
+        <svg id="fig-dirs" role="img" aria-label="AUROC of weird-vs-normal directions by number of reply tokens read"></svg>
+        <figcaption><b>Figure 4.</b> For each behavior, the direction is the difference between the mean residual stream (block 32 of 64) of replies judged weird and of replies judged normal to the same prompt, averaged over prompts. A reply is scored by projecting its mean state over its first <i>t</i> tokens onto the direction. AUROC is the share of same-prompt (weird, normal) pairs in which the weird reply scores higher; 0.5 is chance. Directions are fit with 5-fold cross-validation over prompts, so a direction never saw the prompts it is tested on. 16 replies per prompt, judged by Gemma 4 31B with thinking on. Drunk-driving replies often turn at their opening words, so early separation there does not mean the direction warns before the turn.</figcaption>
+      </figure>
+      <p class="fig-group">Stopping the behavior</p>
+      <figure class="fig">
         <h3>Zeroing 100 neurons lowers all three behaviors; capping the Assistant Axis lowers them less or not at all</h3>
         <div class="legend"><span><i class="sw dot" style="--c:var(--ink)"></i>No intervention</span><span><i class="sw dot" style="--c:var(--accent)"></i>Assistant Axis cap</span><span><i class="sw ring" style="--c:var(--ctrl)"></i>Other persona caps</span><span><i class="sw dot" style="--c:var(--hot)"></i>Top-100 neurons zeroed</span><span><i class="sw dot" style="--c:var(--muted)"></i>Random-100 zeroed</span></div>
         <svg id="fig-stop" role="img" aria-label="Behavior rates under each intervention on the same prompts"></svg>
-        <figcaption><b>Figure 3.</b> Share of replies showing the behavior, 8 replies per prompt, judged by Gemma 4 31B with WeirdChat's prompt; lines are 95% Wilson intervals and the dashed line marks no intervention. The cap clamps the Assistant Axis at the 25th percentile of benign chat at layers 46 to 53; the 5 other caps clamp other persona directions the same way. Laser at aircraft is not an identity behavior and serves as a control for the cap. Cost: increase in next-token loss on capability text, in nats per token. For denying being an AI, the neuron set's drop comes from the prompts it was chosen on and vanishes on held-out prompts, while the cap's drop comes from held-out prompts.</figcaption>
+        <figcaption><b>Figure 5.</b> Share of replies showing the behavior, 8 replies per prompt, judged by Gemma 4 31B with WeirdChat's prompt; lines are 95% Wilson intervals and the dashed line marks no intervention. The cap clamps the Assistant Axis at the 25th percentile of benign chat at layers 46 to 53; the 5 other caps clamp other persona directions the same way. Laser at aircraft is not an identity behavior and serves as a control for the cap. Cost: increase in next-token loss on capability text, in nats per token. For denying being an AI, the neuron set's drop comes from the prompts it was chosen on and vanishes on held-out prompts, while the cap's drop comes from held-out prompts.</figcaption>
+      </figure>
+      <figure class="fig">
+        <h3>On the gradual behaviors, zeroing the shared mid-layer 100 neurons halves the rate; the other shared sets do no better than random sets</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--ink)"></i>No intervention</span><span><i class="sw dot" style="--c:var(--hot)"></i>Shared set zeroed</span><span><i class="sw ring" style="--c:var(--muted)"></i>Matched random set zeroed</span></div>
+        <svg id="fig-shared" role="img" aria-label="Rates of the gradual behaviors with shared neuron sets zeroed"></svg>
+        <figcaption><b>Figure 6.</b> Drunk driving, chemtrails and cutting have no sharp forks and no neuron set of their own, so they were tested with the sets built from attribution shared across 8 behaviors in the fork-and-ablate pipeline. Shared 100: the 100 neurons with the highest median attribution score across the 8 behaviors. Shared mid-layer 100: the same, below layer 48. Leave-one-out: the shared set rebuilt without the behavior being tested. Each set is compared with one random set matched on layer and activation size. 46 high-rate prompts with 4 judged replies each, Gemma 4 31B with WeirdChat's prompt; lines are 95% Wilson intervals and the dashed line marks no intervention. Pooled, the mid-layer set gives 7.6% against 16.3% for its random set (Fisher p = .015). Cost: increase in next-token loss on capability text, in nats per token. With one random set per condition, the bar of beating 95% of random sets is untested.</figcaption>
+      </figure>
+      <p class="fig-group">Reading the neurons with the O-lens</p>
+      <figure class="fig">
+        <h3>Zeroing a behavior's top-100 neurons lowers what the O-lens reads as the behavior; pushing them the other way raises it, and random changes of the same size barely move it</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--ink)"></i>Layer 56</span><span><i class="sw ring" style="--c:var(--ink)"></i>Layer 44</span><span><i class="sw dot" style="--c:var(--hot)"></i>Top-100 zeroed</span><span><i class="sw dot" style="--c:var(--cool)"></i>Pushed the other way</span><span><i class="sw dot" style="--c:var(--muted)"></i>Size-matched random controls</span></div>
+        <svg id="fig-abl" role="img" aria-label="Change in the O-lens behavior score under neuron ablation and size-matched controls"></svg>
+        <figcaption><b>Figure 7.</b> The 41 sharp forks of the five behaviors with their own neuron set, read from 10 tokens before to 5 tokens after the fork token. The reply tokens stay fixed; only the internal state the O-lens reads is changed. Pushing the other way subtracts the change that zeroing the top-100 makes instead of adding it. Zeroing the top-100 moves the state 4 to 5 times further than zeroing 100 random neurons, so two controls move it exactly as far: the random-100 change scaled up, and a random direction. Change in the blind 0 to 10 behavior score against the unchanged state; lines are 95% intervals over forks, and the number after each behavior is its count of forks. At layer 32, below most of the set's neurons, the score does not move.</figcaption>
+      </figure>
+      <figure class="fig">
+        <h3>The O-lens reads the top neurons of three behaviors as further out of the assistant role than random neurons from the same layers</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--hot)"></i>The behavior's top-10 neurons</span><span><i class="sw ring" style="--c:var(--muted)"></i>One random neuron from the same layer for each</span></div>
+        <svg id="fig-nlab" role="img" aria-label="Out-of-role score of O-lens readouts of neuron output directions, set neurons against random neurons"></svg>
+        <div class="fig-ex" id="fig-nlab-ex"></div>
+        <figcaption><b>Figure 8.</b> Each neuron's output direction (its down_proj column) was added to the residual stream at the nearest O-lens layer at or above the neuron, with each sign, and read twice per sign. A blind judge scored each readout 0 to 10 for leaving the assistant role; each neuron keeps its higher-scoring sign, by the same rule for set and random neurons. Lines are 95% intervals over neurons; the number in parentheses is the count of neurons read. Scores for the behavior itself were near 0 for every set. Every neuron's readout appears under its activation in the Neurons tab.</figcaption>
       </figure>
     </div>
     <h3 class="ct-head">All methods</h3>

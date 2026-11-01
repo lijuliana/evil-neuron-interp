@@ -547,11 +547,12 @@ function neuronPanel(rep, j) {
     const info = new Map((b.top10 || []).map(n => [`${n.L}:${n.n}`, n]));
     const rows = rep.neurons.map(([L, n], k) => {
       const m = Math.max(...rep.acts.map(a => Math.abs(a[k])), 1e-6), v = rep.acts[j][k], nfo = info.get(`${L}:${n}`) || {};
-      const lab = nfo.reads || (nfo.plus || []).slice(0, 4).join(' · ');
-      return `<span class="k" title="${esc((nfo.plus || []).join(' '))}">L${L} N${n}</span><span class="b div"><i class="${v < 0 ? 'neg' : ''}" style="width:${50 * Math.abs(v) / m}%;background:var(${v < 0 ? '--cool' : '--hot'})"></i></span><span class="v">${v.toFixed(2)}</span>${lab ? `<span class="lab">${esc(lab)}</span>` : ''}`;
+      const lab = nfo.reads || (nfo.plus || []).slice(0, 4).join(' · '), o = nfo.olens;
+      const ol = o ? `<span class="ol"><b>O-lens ${o.sign}</b>“${esc(o.text)}” <span>out of role ${+o.w.toFixed(1)}/10</span></span>` : '';
+      return `<span class="k" title="${esc((nfo.plus || []).join(' '))}">L${L} N${n}</span><span class="b div"><i class="${v < 0 ? 'neg' : ''}" style="width:${50 * Math.abs(v) / m}%;background:var(${v < 0 ? '--cool' : '--hot'})"></i></span><span class="v">${v.toFixed(2)}</span>${lab ? `<span class="lab">${esc(lab)}</span>` : ''}${ol}`;
     }).join('');
     out.push(`<section class="sec"><h4>Own top-10 activations (down_proj input)</h4><div class="rows">${rows}</div>
-      <p class="note">Bars are normalized to each neuron's max |activation| in this reply. Labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative.</p></section>`);
+      <p class="note">Bars are normalized to each neuron's max |activation| in this reply. Mono labels come from a logit lens on each neuron's output weights: its down_proj column, passed through the final norm and the unembedding, ranks the tokens the neuron promotes. ↔ joins the two ends, since an activation can be negative. O-lens lines: the O-lens read the same column added to the residual stream (+) or subtracted from it (−); shown is the sign whose readouts a blind judge scored further out of the assistant role, with its highest-scoring readout. Neurons with no O-lens line were not read.</p></section>`);
   }
   return out.join('');
 }
@@ -618,7 +619,7 @@ function lensPanel(rep, j) {
 let CMP = null;
 async function renderCompare() {
   if (!CMP) CMP = await getJSON('compare.json');
-  figWithin(); figFork(); figStop();
+  figWithin(); figFork(); figPrompt(); figDirs(); figStop(); figShared(); figAbl(); figNlab();
 }
 const figW = id => Math.max(320, Math.round($(id).clientWidth || $(id).parentNode.clientWidth || 640));
 const tx = (x, y, t, cls = '', anchor = 'start') => `<text x="${x}" y="${y}"${cls ? ` class="${cls}"` : ''} text-anchor="${anchor}">${t}</text>`;
@@ -746,6 +747,156 @@ function figStop() {
   for (const t of [0, 0.2, 0.4, 0.6]) grid += ln(x(t), gridTop + 4, x(t), y - 8, '--rule', t ? 'stroke-dasharray="2 4"' : '') + tx(x(t), y + 6, `${t * 100}%`, '', 'middle');
   const H = y + 30;
   setSVG(id, W, H, grid + g + tx((x0 + x1) / 2, H - 6, 'Share of replies showing the behavior', 'axt', 'middle'));
+}
+
+// rows of dot-and-interval marks on one x scale; each row: {lab, marks: [{v: [m, lo, hi], c, shape, hollow, title}], num}
+function dotRows(rows, o) {
+  const { x, x0, top, rh, xr } = o;
+  let g = '';
+  rows.forEach((r, k) => {
+    const yc = top + k * rh + rh / 2, nm = r.marks.length;
+    if (r.lab) g += tx(0, yc + 4, r.lab, `lab${r.cls ? ` ${r.cls}` : ''}`);
+    r.marks.forEach((mk, i) => {
+      if (!mk.v) return;
+      const [m, l, h] = mk.v, y = yc + (nm > 1 ? (i - (nm - 1) / 2) * 8 : 0);
+      if (l != null) g += ln(x(l), y, x(h), y, mk.c, `stroke-width="1.4" stroke-opacity="${mk.hollow ? 0.4 : 0.55}"`);
+      g += dot(x(m), y, mk.c, esc(mk.title), mk.shape || 'circle', mk.hollow);
+    });
+    if (r.num != null && xr) g += tx(xr, yc + 4, r.num, 'num', 'end');
+  });
+  return g;
+}
+const xTicks = (x, ts, y0, y1, fmt) => ts.map(t => ln(x(t), y0, x(t), y1 + 4, t === 0 ? '--faint' : '--rule', t === 0 ? '' : 'stroke-dasharray="2 4"') + tx(x(t), y1 + 18, fmt(t), '', 'middle')).join('');
+const s1 = v => v === 0 ? '0' : sgn(v).replace(/0$/, '');
+
+function figPrompt() {
+  const id = 'fig-prompt', W = figW(id), d = CMP.prompt, narrow = W < 560;
+  const S = [['text', 'Text judge', '--muted', 'circle'], ['lens32', 'O-lens, layer 32', '--accent', 'circle'], ['lens44', 'O-lens, layer 44', '--accent', 'circle'],
+    ['lens56', 'O-lens, layer 56', '--accent', 'circle'], ['axis', narrow ? 'Assistant Axis' : 'Assistant Axis, sign flipped', '--cool', 'square'],
+    ['evil', narrow ? 'Evil vector' : 'Evil trait vector', '--ctrl', 'square'], ['halluc', narrow ? 'Hallucinating vector' : 'Hallucinating trait vector', '--ctrl', 'square']];
+  const labW = narrow ? 128 : 190, numW = narrow ? 0 : 96, x0 = labW + 10, x1 = W - numW - 14, lo = -0.2, hi = 0.5;
+  const x = v => x0 + (x1 - x0) * (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  const rh = 30, top = 20, bot = top + S.length * rh, H = bot + 44;
+  const rows = S.map(([k, lab, c, shape]) => ({ lab: esc(lab), num: narrow ? null : `${sgn(d[k].on[0])} / ${sgn(d[k].off[0])}`, marks: [
+    { v: d[k].on, c, shape, title: `${lab}, thinking-on rates: ${sgn(d[k].on[0])} [${sgn(d[k].on[1])}, ${sgn(d[k].on[2])}]` },
+    { v: d[k].off, c, shape, hollow: true, title: `${lab}, thinking-off rates: ${sgn(d[k].off[0])} [${sgn(d[k].off[1])}, ${sgn(d[k].off[2])}]` }] }));
+  const g = xTicks(x, [-0.2, 0, 0.2, 0.4], top, bot, s1) + (narrow ? '' : tx(W - 2, 12, 'On / off', 'colh', 'end')) +
+    dotRows(rows, { x, x0, top, rh, xr: W - 2 }) +
+    tx((x0 + x1) / 2, H - 6, narrow ? 'Rank correlation with the rate' : "Rank correlation with the prompt's weird rate, within behavior", 'axt', 'middle');
+  setSVG(id, W, H, g);
+}
+
+function figDirs() {
+  const id = 'fig-dirs', W = figW(id), D = CMP.dirs, T = CMP.titles, ids = CMP.shared.ids;
+  const order = ['drunk', 'chemtrails', 'cutting', 'laser'].filter(b => D[b]);
+  const cols = W >= 520 ? 2 : 1, padL = 30, gapX = 26, pw = (W - cols * padL - (cols - 1) * gapX - 6) / cols, ph = 112, gapY = 62, top = 30;
+  const lo = 0.4, hi = 0.9;
+  let g = '';
+  order.forEach((b, k) => {
+    const d = D[b], cx = padL + (k % cols) * (pw + padL + gapX), cy = top + Math.floor(k / cols) * (ph + gapY);
+    const xs = t => cx + pw * Math.log2(t) / 10, ys = v => cy + ph * (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo));
+    g += tx(cx, cy - 12, `${esc(T[ids[b]] || b)} <tspan class="n">${d.prompts} prompts</tspan>`, 'ptitle');
+    for (const v of [0.5, 0.7, 0.9]) g += ln(cx, ys(v), cx + pw, ys(v), v === 0.5 ? '--faint' : '--rule', v === 0.5 ? '' : 'stroke-dasharray="2 4"') + tx(cx - 6, ys(v) + 4, v.toFixed(1), '', 'end');
+    for (const t of [1, 8, 64, 512]) g += ln(xs(t), cy + ph, xs(t), cy + ph + 4, '--faint') + tx(xs(t), cy + ph + 17, t, '', 'middle');
+    const path = (vals, c, extra) => `<path d="M${d.t.map((t, i) => `${xs(t)},${ys(vals[i])}`).join('L')}" fill="none" style="stroke:var(${c})" ${extra}/>`;
+    g += path(d.null, '--faint', 'stroke-width="1.3" stroke-dasharray="4 3"') + path(d.auc, '--ok', 'stroke-width="1.8"');
+    g += d.t.map((t, i) => dot(xs(t), ys(d.auc[i]), '--ok', `${esc(T[ids[b]] || b)}, first ${t} tokens: AUROC ${d.auc[i].toFixed(2)} (shuffled-label 95th percentile ${d.null[i].toFixed(2)})`)).join('');
+    g += tx(xs(1024) + 4, ys(d.auc[d.auc.length - 1]) - 7, d.auc[d.auc.length - 1].toFixed(2), 'dl ok', 'end');
+  });
+  const H = top + Math.ceil(order.length / cols) * (ph + gapY) - gapY + 50;
+  g += tx(W / 2, H - 6, 'Reply tokens read (log scale); y: AUROC, 0.5 = chance', 'axt', 'middle');
+  setSVG(id, W, H, g);
+}
+
+// grouped rate rows (figure 6): each group has a header line, then one row per condition
+function figShared() {
+  const id = 'fig-shared', W = figW(id), S = CMP.shared, T = CMP.titles, narrow = W < 560;
+  const groups = [['pooled', 'All three behaviors'], ...['drunk', 'chemtrails', 'cutting'].map(b => [b, T[S.ids[b]] || b])].filter(([b]) => S.behaviors[b]);
+  const C = [['clean', null, 'No intervention'], ['sharedmid100', 'rand_sharedmid100', narrow ? 'Shared mid-layer' : 'Shared mid-layer 100 zeroed'],
+    ['shared100', 'rand_shared100', narrow ? 'Shared, all layers' : 'Shared 100 zeroed (all layers)'], ['loo100', 'rand_loo100', narrow ? 'Leave-one-out' : 'Leave-one-out shared 100 zeroed']];
+  const labW = narrow ? 112 : Math.min(205, Math.max(160, Math.round(W * 0.27))), costW = narrow ? 0 : 74, rateW = narrow ? 62 : 82;
+  const x0 = labW + 10, x1 = W - costW - rateW - 12, hi = 0.45, x = v => x0 + (x1 - x0) * Math.min(v, hi) / hi;
+  const xr = x1 + rateW, xc = W - 2, rh = 24, head = 26;
+  const dmg = v => v == null ? '–' : v < 0.001 ? v.toFixed(4) : v.toFixed(3);
+  let y = 22, g = tx(xr, 12, narrow ? 'Set / rand.' : 'Set / random', 'colh', 'end') + (narrow ? '' : tx(xc, 12, 'Cost', 'colh', 'end'));
+  const gridTop = y;
+  for (const [b, name] of groups) {
+    const B = S.behaviors[b], idb = S.ids[b];
+    g += tx(0, y + 16, esc(name), 'grp') + tx(xc, y + 16, `${B.prompts} prompts, ${B.clean[3]} replies`, 'n', 'end');
+    y += head;
+    const y0 = y;
+    const rows = C.map(([k, rk, lab]) => {
+      const marks = [{ v: B[k], c: k === 'clean' ? '--ink' : '--hot', title: `${lab}: ${pct(B[k][0])} [${pct(B[k][1])}, ${pct(B[k][2])}]` }];
+      if (rk) marks.push({ v: B[rk], c: '--muted', hollow: true, title: `matched random set: ${pct(B[rk][0])} [${pct(B[rk][1])}, ${pct(B[rk][2])}]` });
+      return { lab, marks, num: rk ? `${pct(B[k][0])} / ${pct(B[rk][0])}` : pct(B[k][0]), k };
+    });
+    g += dotRows(rows, { x, x0, top: y, rh, xr });
+    if (!narrow) rows.forEach((r, i) => {
+      if (r.k === 'clean') return;
+      let c;
+      if (r.k !== 'loo100') c = dmg(S.damage[r.k]);
+      else if (b !== 'pooled') c = dmg(S.damage[`loo100|${idb}`]);
+      else { const v = Object.keys(S.damage).filter(k => k.startsWith('loo100|')).map(k => S.damage[k]); c = `${dmg(Math.min(...v))}–${dmg(Math.max(...v)).replace(/^0/, '')}`; }
+      g += tx(xc, y + i * rh + rh / 2 + 4, c, 'num', 'end');
+    });
+    y += C.length * rh;
+    g = ln(x(B.clean[0]), y0 + 2, x(B.clean[0]), y - 2, '--faint', 'stroke-dasharray="3 3"') + g;
+    y += 12;
+  }
+  const grid = (narrow ? [0, 0.2, 0.4] : [0, 0.1, 0.2, 0.3, 0.4]).map(t => ln(x(t), gridTop + 4, x(t), y - 8, '--rule', t ? 'stroke-dasharray="2 4"' : '') + tx(x(t), y + 6, `${Math.round(t * 100)}%`, '', 'middle')).join('');
+  const H = y + 30;
+  setSVG(id, W, H, grid + g + tx((x0 + x1) / 2, H - 6, 'Share of replies showing the behavior', 'axt', 'middle'));
+}
+
+function figAbl() {
+  const id = 'fig-abl', W = figW(id), A = CMP.abl, T = CMP.titles, narrow = W < 560;
+  const C = [['top', narrow ? 'Zero top-100' : "Zero the behavior's top-100 neurons", '--hot'],
+    ['amp', narrow ? 'Push them the other way' : 'Push the same neurons the other way', '--cool'],
+    ['rand_s', narrow ? 'Random-100, scaled' : 'Zero 100 random neurons, scaled up', '--muted'],
+    ['gauss', narrow ? 'Random direction' : 'Move in a random direction', '--muted'],
+    ['rand', narrow ? 'Random-100, unscaled' : 'Zero 100 random neurons, unscaled', '--ctrl']];
+  const bs = Object.keys(A.by).sort((a, b) => A.by[a].top[0] - A.by[b].top[0]);
+  const labW = narrow ? 138 : Math.min(240, Math.max(180, Math.round(W * 0.3))), numW = narrow ? 0 : 92;
+  const x0 = labW + 10, x1 = W - numW - 14, lo = -2.2, hi = 1.4, x = v => x0 + (x1 - x0) * (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  const rh = 26, f = v => `${sgn(v[0])} [${sgn(v[1])}, ${sgn(v[2])}]`;
+  let y = 6, g = '';
+  const n = A.all.top[56][3];
+  g += tx(0, y + 14, narrow ? `All ${n} forks` : `All ${n} forks, ${A.positions} positions`, 'grp') + (narrow ? '' : tx(W - 2, y + 14, 'Layer 56', 'colh', 'end'));
+  y += 24;
+  const yA = y;
+  g += dotRows(C.map(([k, lab, c]) => ({ lab: esc(lab), num: narrow ? null : sgn(A.all[k][56][0]), marks: [
+    { v: A.all[k][56], c, title: `${lab}, layer 56: ${f(A.all[k][56])}` }, { v: A.all[k][44], c, hollow: true, title: `${lab}, layer 44: ${f(A.all[k][44])}` }] })), { x, x0, top: y, rh, xr: W - 2 });
+  y += C.length * rh + 18;
+  g += tx(0, y + 14, narrow ? 'Each behavior, layer 56' : 'Each behavior, layer 56', 'grp') + (narrow ? '' : tx(W - 2, y + 14, 'Zero / push', 'colh', 'end'));
+  y += 24;
+  g += dotRows(bs.map(b => ({ lab: `${esc(T[b] || b)} <tspan class="n">(${A.by[b].top[3]})</tspan>`, num: narrow ? null : `${sgn(A.by[b].top[0])} / ${sgn(A.by[b].amp[0])}`, marks: [
+    { v: A.by[b].top, c: '--hot', title: `${T[b] || b}, top-100 zeroed: ${f(A.by[b].top)}` }, { v: A.by[b].amp, c: '--cool', title: `${T[b] || b}, pushed the other way: ${f(A.by[b].amp)}` }] })), { x, x0, top: y, rh, xr: W - 2 });
+  y += bs.length * rh;
+  const H = y + 44;
+  setSVG(id, W, H, xTicks(x, [-2, -1, 0, 1], yA - 4, y, s1) + g + tx((x0 + x1) / 2, H - 6, narrow ? 'Change in O-lens behavior score' : 'Change in the O-lens behavior score (0 to 10) vs the unchanged state', 'axt', 'middle'));
+}
+
+function figNlab() {
+  const id = 'fig-nlab', W = figW(id), Nl = CMP.nlab, T = CMP.titles, narrow = W < 560;
+  const keys = Object.keys(Nl).filter(k => k !== 'sharedmid100').sort((a, b) => Nl[b].diff[0] - Nl[a].diff[0]).concat(Nl.sharedmid100 ? ['sharedmid100'] : []);
+  const labW = narrow ? 150 : Math.min(230, Math.max(180, Math.round(W * 0.3))), numW = narrow ? 0 : 70;
+  const x0 = labW + 10, x1 = W - numW - 14, lo = 0, hi = 6, x = v => x0 + (x1 - x0) * (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  const rh = 28, top = 20, bot = top + keys.length * rh, H = bot + 44;
+  const f = v => `${v[0].toFixed(2)} [${v[1].toFixed(2)}, ${v[2].toFixed(2)}]`;
+  const rows = keys.map(k => {
+    const name = k === 'sharedmid100' ? 'Shared mid-layer 100' : (T[k] || k);
+    return { lab: `${esc(name)} <tspan class="n">(${Nl[k].set[3]})</tspan>`, num: narrow ? null : sgn(Nl[k].diff[0]), marks: [
+      { v: Nl[k].set, c: '--hot', title: `${name}, set neurons: ${f(Nl[k].set)}` },
+      { v: Nl[k].rand, c: '--muted', hollow: true, title: `${name}, random same-layer neurons: ${f(Nl[k].rand)}` }] };
+  });
+  setSVG(id, W, H, xTicks(x, [0, 2, 4, 6], top, bot, v => v) + (narrow ? '' : tx(W - 2, 12, 'Difference', 'colh', 'end')) +
+    dotRows(rows, { x, x0, top, rh, xr: W - 2 }) + tx((x0 + x1) / 2, H - 6, narrow ? 'Out-of-role score (0 to 10)' : 'Out-of-role score of the readouts (0 to 10)', 'axt', 'middle'));
+  // the highest-scoring neuron readout of each behavior, from the per-neuron labels in index.json
+  const ex = state.index.behaviors.filter(b => (b.top10 || []).some(n => n.olens)).map(b => {
+    const n = b.top10.filter(n => n.olens).sort((p, q) => q.olens.w - p.olens.w || q.olens.b - p.olens.b)[0];
+    return `<li><b>${esc(b.title)}</b> <span class="nid">L${n.L} N${n.n} ${n.olens.sign}</span> “${esc(n.olens.text)}” <span class="sc">${+n.olens.w.toFixed(1)}/10</span></li>`;
+  });
+  $('fig-nlab-ex').innerHTML = ex.length ? `<p>Highest-scoring readout in each behavior's top 10</p><ul>${ex.join('')}</ul>` : '';
 }
 
 // ------------------------------------------------------------------ boot

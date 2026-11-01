@@ -133,6 +133,37 @@ for line in open(f"{A}/results_neuron_logits.txt"):
         toks = [t for t in ast.literal_eval(line.strip()[2:]) if "�" not in t]
         cur["plus" if line.strip()[0] == "+" else "minus"] = toks[:6]
 
+def olens_neurons():
+    """O-lens readouts of each own top-10 neuron's output direction (scripts/83-87): {(L, n, behavior): label}, from the
+    sign (+w or -w) whose readouts score higher for leaving the assistant role; text = the first line of its highest-scoring
+    readout, w / b = that sign's mean blind 0-10 out-of-role / behavior score, rl = the layer it was read at."""
+    R = "runs/olens"
+    if not os.path.exists(f"{R}/reads.jsonl"):
+        return {}
+    sc = collections.defaultdict(lambda: collections.defaultdict(list))
+    for r in map(json.loads, open(f"{R}/scores.jsonl")):
+        if r["key"].startswith("N|"):
+            sc[r["key"]][r["s"]].append((r["weird"], r["behavior"]))
+    texts = {}
+    for r in map(json.loads, open(f"{R}/reads.jsonl")):
+        if r["key"].startswith("N|") and "|top10|" in r["key"] and "|rand|" not in r["key"]:
+            texts.setdefault(r["key"], (r["layer"], r["texts"]))  # a neuron listed twice was read twice; keep the first
+    first = lambda t: re.sub(r"^[\s\-/]*(\d+\s*[:.：)]\s*)?", "", t.strip().split("\n")[0]).replace("**", "").strip()
+    out = {}
+    for k, (rl, ts) in texts.items():
+        _, L, n, _, b, sign = k.split("|")
+        per = {i: (sum(w for w, _ in v) / len(v), sum(x for _, x in v) / len(v)) for i, v in sc[k].items() if i < len(ts)}
+        if not per:
+            continue
+        lab = {"sign": "+" if sign == "+1" else "−", "w": round(sum(v[0] for v in per.values()) / len(per), 2),
+               "b": round(sum(v[1] for v in per.values()) / len(per), 2), "rl": rl,
+               "text": first(ts[max(per, key=lambda i: per[i])])[:160]}
+        key = (int(L), int(n), b)
+        if key not in out or (lab["w"], lab["b"]) > (out[key]["w"], out[key]["b"]):
+            out[key] = lab
+    return out
+OLN = olens_neurons()
+
 def top10_info(bid):
     s = abl.get((bid, "top", 10))
     if not s:
@@ -141,7 +172,8 @@ def top10_info(bid):
     for L, ns in s["spec"].items():
         for n in ns:
             L = int(L); d = nlog[bid].get((L, n), {})
-            out.append({"L": L, "n": n, "reads": READS.get((L, n)), "plus": d.get("plus", []), "minus": d.get("minus", [])})
+            out.append({"L": L, "n": n, "reads": READS.get((L, n)), "plus": d.get("plus", []), "minus": d.get("minus", []),
+                        "olens": OLN.get((L, n, bid))})
     return out
 
 def rate_rows(bid):
