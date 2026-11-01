@@ -281,6 +281,28 @@ table.ct tr.grp td { font: 600 11px var(--sans); letter-spacing: .08em; text-tra
 table.ct tr.ref td { background: var(--tint) }
 .ct-note { font-size: 12.5px; color: var(--faint); margin: 0; max-width: 90ch; line-height: 1.5 }
 
+/* compare figures */
+.figs { display: flex; flex-direction: column; gap: 36px; margin: 8px 0 12px }
+.fig { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 940px }
+.fig h3 { font: 500 19px/1.3 var(--serif); margin: 0; text-wrap: balance }
+.fig svg { width: 100%; display: block; overflow: visible }
+.fig svg text { font: 11px var(--sans); fill: var(--faint); font-variant-numeric: tabular-nums }
+.fig svg .lab { font-size: 12.5px; fill: var(--ink) }
+.fig svg .lab.all { font-weight: 600 }
+.fig svg .n { font-size: 11px; fill: var(--faint); font-weight: 400 }
+.fig svg .grp { font: 600 13px var(--sans); fill: var(--ink) }
+.fig svg .ptitle, .fig svg .dl { paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; stroke-linejoin: round }
+.fig svg .ptitle { font-weight: 600; font-size: 11.5px; fill: var(--muted) }
+.fig svg .axt { font-size: 11.5px; fill: var(--muted) }
+.fig svg .colh { font-weight: 600; font-size: 10.5px; letter-spacing: .06em; fill: var(--faint) }
+.fig svg .num { font: 11.5px var(--mono); fill: var(--muted) }
+.fig svg .dl { font-weight: 600; font-size: 11px }
+.fig svg .dl.hot { fill: var(--hot) } .fig svg .dl.ok { fill: var(--ok) }
+.fig figcaption { font-size: 12.5px; color: var(--muted); line-height: 1.5; max-width: 95ch; text-wrap: pretty }
+.fig figcaption b { color: var(--ink); font-weight: 600 }
+.sw.sq { width: 8px; height: 8px; border-radius: 1.5px; background: var(--c) }
+.ct-head { font: 500 19px/1.3 var(--serif); margin: 10px 0 0; padding-top: 22px; border-top: 1px solid var(--rule) }
+
 /* method */
 .method { margin-top: 4px }
 .method summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border-radius: 6px; color: var(--faint) }
@@ -362,6 +384,27 @@ table.ct tr.ref td { background: var(--tint) }
     <p class="eyebrow">Compare methods</p>
     <h2>Neurons against other interpretability methods</h2>
     <p>Each method is scored on the same prompts and replies: does it warn before a reply turns weird, can it stop the behavior, and what does that cost the rest of the model. Rates are judged by Gemma 4 31B with WeirdChat's prompt; P(weird) comes from 8 to 24 resampled continuations per cut.</p>
+    <div class="figs" id="compare-figs">
+      <figure class="fig">
+        <h3>Within a reply, only the text judge tracks the measured chance of weird</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--muted)"></i>Text judge</span><span><i class="sw dot" style="--c:var(--accent)"></i>O-lens, layer 56</span><span><i class="sw sq" style="--c:var(--cool)"></i>Assistant Axis, block 48</span></div>
+        <svg id="fig-within" role="img" aria-label="Rank correlation of each signal with the measured chance of weird, by behavior"></svg>
+        <figcaption><b>Figure 1.</b> For each weird reply, the rank correlation between a signal and the measured chance that the reply ends weird, taken across the reply's cut points (about 15 per reply) and averaged over replies. Lines are 95% intervals over replies; the number after each behavior is its count of replies. Text judge: Haiku reading only the transcript so far. O-lens: blind behavior score of the readouts. Assistant Axis: sign flipped, so a state further from the default assistant counts as weirder. 0 means no relation.</figcaption>
+      </figure>
+      <figure class="fig">
+        <h3>Near a fork, the O-lens rises a few tokens early, and just as much when the same words are read as a plain document</h3>
+        <div class="legend"><span><i class="sw ln" style="--c:var(--hot)"></i>Measured chance of weird</span><span><i class="sw dash" style="--c:var(--muted)"></i>Text judge</span><span><i class="sw ln" style="--c:var(--accent)"></i>O-lens, reply in the chat</span><span><i class="sw dash" style="--c:var(--faint)"></i>O-lens, same words as a plain document</span><span><i class="sw ln" style="--c:var(--muted)"></i>Assistant Axis</span><span><i class="sw dash" style="--c:var(--ok)"></i>cap threshold</span></div>
+        <svg id="fig-fork" role="img" aria-label="Signals aligned at the fork token, averaged over the 46 sharp forks"></svg>
+        <figcaption><b>Figure 2.</b> The 46 sharp forks, aligned at the fork token: position 0 is the state that chooses it, +1 the state after it is written. The measured chance of weird comes from 24 fresh continuations on each side of the fork token, judged with thinking on; the text judge only rises once the token is written. The Assistant Axis stays below the capping threshold throughout and moves little at the fork. Bands are 95% intervals over forks.</figcaption>
+      </figure>
+      <figure class="fig">
+        <h3>Zeroing 100 neurons lowers all three behaviors; capping the Assistant Axis lowers them less or not at all</h3>
+        <div class="legend"><span><i class="sw dot" style="--c:var(--ink)"></i>No intervention</span><span><i class="sw dot" style="--c:var(--accent)"></i>Assistant Axis cap</span><span><i class="sw ring" style="--c:var(--ctrl)"></i>Other persona caps</span><span><i class="sw dot" style="--c:var(--hot)"></i>Top-100 neurons zeroed</span><span><i class="sw dot" style="--c:var(--muted)"></i>Random-100 zeroed</span></div>
+        <svg id="fig-stop" role="img" aria-label="Behavior rates under each intervention on the same prompts"></svg>
+        <figcaption><b>Figure 3.</b> Share of replies showing the behavior, 8 replies per prompt, judged by Gemma 4 31B with WeirdChat's prompt; lines are 95% Wilson intervals and the dashed line marks no intervention. The cap clamps the Assistant Axis at the 25th percentile of benign chat at layers 46 to 53; the 5 other caps clamp other persona directions the same way. Laser at aircraft is not an identity behavior and serves as a control for the cap. Cost: increase in next-token loss on capability text, in nats per token. For denying being an AI, the neuron set's drop comes from the prompts it was chosen on and vanishes on held-out prompts, while the cap's drop comes from held-out prompts.</figcaption>
+      </figure>
+    </div>
+    <h3 class="ct-head">All methods</h3>
     <div class="ct-wrap"><table class="ct">
       <thead><tr><th>Method</th><th>Warns before the weird turn</th><th>Stops the behavior</th><th>Cost to the rest of the model</th><th>Compute</th></tr></thead>
       <tbody>

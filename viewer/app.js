@@ -138,6 +138,7 @@ function showMethods() {
   state.b = METHODS; renderTabs();
   $('bench').hidden = true; $('compare').hidden = false;
   history.replaceState(null, '', '#methods');
+  renderCompare().catch(() => { $('compare-figs').hidden = true; });
 }
 function maxJump(p) { return Math.max(-1, ...p.replies.filter(r => r.kind === 'fork').map(r => r.jump ?? 0)); }
 
@@ -612,6 +613,141 @@ function lensPanel(rep, j) {
   return out.join('');
 }
 
+// ------------------------------------------------------------------ compare tab figures
+// Colors come from CSS variables in inline styles, so the figures follow the theme without redrawing.
+let CMP = null;
+async function renderCompare() {
+  if (!CMP) CMP = await getJSON('compare.json');
+  figWithin(); figFork(); figStop();
+}
+const figW = id => Math.max(320, Math.round($(id).clientWidth || $(id).parentNode.clientWidth || 640));
+const tx = (x, y, t, cls = '', anchor = 'start') => `<text x="${x}" y="${y}"${cls ? ` class="${cls}"` : ''} text-anchor="${anchor}">${t}</text>`;
+const ln = (x1, y1, x2, y2, c, extra = '') => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:var(${c})" ${extra}/>`;
+const dot = (x, y, c, title, shape = 'circle', hollow = false) => {
+  const st = hollow ? `fill:var(--sheet);stroke:var(${c});stroke-width:1.5` : `fill:var(${c})`;
+  return shape === 'square' ? `<rect x="${x - 3.6}" y="${y - 3.6}" width="7.2" height="7.2" rx="1" style="${st}"><title>${title}</title></rect>`
+    : `<circle cx="${x}" cy="${y}" r="${hollow ? 3.4 : 3.9}" style="${st}"><title>${title}</title></circle>`;
+};
+const sgn = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`;
+function setSVG(id, W, H, g) { const svg = $(id); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H); svg.innerHTML = g; }
+
+function figWithin() {
+  const id = 'fig-within', W = figW(id), d = CMP.within, T = CMP.titles;
+  const order = Object.keys(d).filter(b => b !== 'all').sort((a, b) => d[b].text[0] - d[a].text[0]);
+  const rows = [['all', 'All weird replies'], ...order.map(b => [b, T[b] || b])];
+  const labW = Math.min(205, Math.max(150, Math.round(W * 0.3))), x0 = labW + 10, x1 = W - 14, lo = -0.6, hi = 1;
+  const x = v => x0 + (x1 - x0) * (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  const rh = 30, top = 6, bot = top + rows.length * rh, H = bot + 44;
+  const S = [['text', '--muted', 'circle', 'text judge'], ['lens', '--accent', 'circle', 'O-lens'], ['axis', '--cool', 'square', 'Assistant Axis']];
+  let g = '';
+  for (const t of [-0.5, 0, 0.5, 1]) g += ln(x(t), top, x(t), bot + 4, t === 0 ? '--faint' : '--rule', t === 0 ? '' : 'stroke-dasharray="2 4"') + tx(x(t), bot + 18, t === 0 ? '0' : sgn(t).replace('.00', '.0').replace('.50', '.5'), '', 'middle');
+  g += ln(0, top + rh, x1, top + rh, '--rule-2');
+  rows.forEach(([b, lab], k) => {
+    const yc = top + k * rh + rh / 2, v = d[b];
+    g += tx(0, yc + 4, `${esc(lab)} <tspan class="n">(${v.text[3]})</tspan>`, `lab${b === 'all' ? ' all' : ''}`);
+    S.forEach(([key, c, shape, name], i) => {
+      const [m, l, h] = v[key], y = yc + (i - 1) * 7.5;
+      g += ln(x(l), y, x(h), y, c, 'stroke-width="1.4" stroke-opacity="0.5"') + dot(x(m), y, c, `${esc(lab)}, ${name}: ${sgn(m)} [${sgn(l)}, ${sgn(h)}]`, shape);
+    });
+  });
+  g += tx((x0 + x1) / 2, H - 6, W < 560 ? 'Rank correlation within each reply' : 'Rank correlation with the measured chance of weird, within each reply', 'axt', 'middle');
+  setSVG(id, W, H, g);
+}
+
+function figFork() {
+  const id = 'fig-fork', W = figW(id), F = CMP.fork, A = CMP.axis;
+  const x0 = 52, x1 = W - 14, xr = r => x0 + (x1 - x0) * (r + 40) / 60, fx = xr(0.5);
+  const hP = [92, 92, 72], gapT = 30;
+  let y = gapT, g = '', fl = '';
+  // one panel: title, y gridlines, then mean lines with 95% bands over forks (series of [mean, lo, hi] by rel)
+  const series = (vals, ys, c, dash = '') => {
+    let area = '', line = '', seg = [];
+    const flush = () => {
+      if (seg.length > 1) {
+        area += `<path d="M${seg.map(([r, v]) => `${xr(r)},${ys(v[1])}`).join('L')}L${seg.slice().reverse().map(([r, v]) => `${xr(r)},${ys(v[2])}`).join('L')}Z" style="fill:var(${c})" fill-opacity="0.14"/>`;
+        line += `<path d="M${seg.map(([r, v]) => `${xr(r)},${ys(v[0])}`).join('L')}" fill="none" style="stroke:var(${c})" stroke-width="1.7" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`;
+      }
+      seg = [];
+    };
+    F.rel.forEach((r, k) => { if (vals[k]) seg.push([r, vals[k]]); else flush(); });
+    flush();
+    return area + line;
+  };
+  const panel = (title, h, lo, hi, ticks, fmt, body) => {
+    const ys = v => y + (1 - (v - lo) / (hi - lo)) * h;
+    let p = tx(x0, y - 12, title, 'ptitle');
+    for (const t of ticks) p += ln(x0, ys(t), x1, ys(t), '--rule', 'stroke-dasharray="2 4"') + tx(x0 - 8, ys(t) + 4, fmt(t), '', 'end');
+    p += body(ys);
+    y += h + gapT + 12;
+    return p;
+  };
+  g += panel('Chance of weird', hP[0], 0, 1, [0, 0.5, 1], v => `${v * 100}%`, ys => {
+    const [b, bl, bh] = F.P.before, [a, al, ah] = F.P.after;
+    return series(F.text, ys, '--muted', '4 3') +
+      `<rect x="${xr(-40)}" y="${ys(bh)}" width="${fx - xr(-40)}" height="${ys(bl) - ys(bh)}" style="fill:var(--hot)" fill-opacity="0.14"/>` +
+      `<rect x="${fx}" y="${ys(ah)}" width="${xr(20) - fx}" height="${ys(al) - ys(ah)}" style="fill:var(--hot)" fill-opacity="0.14"/>` +
+      `<path d="M${xr(-40)},${ys(b)}H${fx}V${ys(a)}H${xr(20)}" fill="none" style="stroke:var(--hot)" stroke-width="2"><title>measured: ${pct(b)} before, ${pct(a)} after</title></path>` +
+      tx(xr(-39), ys(b) - 6, `measured ${pct(b)}`, 'dl hot') + tx(xr(19.5), ys(a) + 14, `${pct(a)}`, 'dl hot', 'end');
+  });
+  g += panel('O-lens behavior score, layer 56 (0 to 10)', hP[1], 0, 10, [0, 5, 10], v => v, ys => series(F.raw, ys, '--faint', '4 3') + series(F.lens, ys, '--accent'));
+  const av = F.axis.filter(Boolean), alo = Math.floor(Math.min(...av.map(v => v[1])) - 1), ahi = Math.ceil(Math.max(A.tau, ...av.map(v => v[2])) + 1);
+  g += panel('Assistant Axis projection, block 48', hP[2], alo, ahi, [0], v => v, ys =>
+    ln(x0, ys(A.tau), x1, ys(A.tau), '--ok', 'stroke-dasharray="5 3" stroke-width="1.3"') + tx(x0 - 8, ys(A.tau) + 4, 'cap', 'dl ok', 'end') + series(F.axis, ys, '--muted'));
+  const yEnd = y - gapT - 12;
+  fl += ln(fx, gapT - 8, fx, yEnd + 2, '--hot', 'stroke-dasharray="3 3"') + tx(fx + 5, gapT - 1, 'fork token written', 'dl hot');
+  for (const t of [-40, -30, -20, -10, 0, 10, 20]) fl += ln(xr(t), yEnd + 2, xr(t), yEnd + 6, '--faint') + tx(xr(t), yEnd + 19, t > 0 ? `+${t}` : t < 0 ? `−${-t}` : '0', '', 'middle');
+  const H = yEnd + 44;
+  fl += tx((x0 + x1) / 2, H - 6, 'Tokens before and after the fork token', 'axt', 'middle');
+  setSVG(id, W, H, fl + g);
+}
+
+function figStop() {
+  const id = 'fig-stop', W = figW(id), S = CMP.stop, T = CMP.titles;
+  const bs = ['denying-ai-identity', 'false-physical-embodiment', 'laser-at-aircraft'].filter(b => S.behaviors[b]);
+  // narrow screens drop the cost column and shorten the labels
+  const narrow = W < 560;
+  const C = [['clean', 'No intervention', '--ink'], ['cap_axis', narrow ? 'Axis cap' : 'Assistant Axis cap', '--accent'], ['caps', narrow ? 'Other caps' : '5 other persona caps', '--ctrl'],
+    ['top100', narrow ? 'Top-100 zeroed' : 'Top-100 neurons zeroed', '--hot'], ['rand100', 'Random-100 zeroed', '--muted']];
+  const labW = narrow ? 112 : Math.min(185, Math.max(140, Math.round(W * 0.26))), costW = narrow ? 0 : 64, rateW = narrow ? 50 : 58;
+  const x0 = labW + 10, x1 = W - costW - rateW - 12, hi = 0.7, x = v => x0 + (x1 - x0) * Math.min(v, hi) / hi;
+  const xr = x1 + rateW, xc = W - 2, rh = 22, head = 26;
+  const dmg = v => v == null ? '–' : v < 0.001 ? v.toFixed(4) : v.toFixed(3);
+  const cost = (yy, t) => narrow ? '' : tx(xc, yy, t, 'num', 'end');
+  let y = 22, g = tx(xr, 12, 'Rate', 'colh', 'end') + (narrow ? '' : tx(xc, 12, 'Cost', 'colh', 'end'));
+  const gridTop = y;
+  for (const b of bs) {
+    const B = S.behaviors[b], R = B.rates, n = R.clean[3];
+    const caps = Object.keys(R).filter(k => k.startsWith('cap_rp'));
+    g += tx(0, y + 16, `${esc(T[b] || b)}${b === 'laser-at-aircraft' ? ', control' : ''}`, 'grp') + tx(xc, y + 16, narrow ? `${B.prompts} prompts` : `${B.prompts} prompts, ${n} replies each`, 'n', 'end');
+    y += head;
+    const y0 = y;
+    for (const [k, lab, c] of C) {
+      const yc = y + rh / 2;
+      g += tx(0, yc + 4, lab, 'lab');
+      if (k === 'caps') {
+        const vs = caps.map(cp => R[cp][0]), mn = Math.min(...vs), mx = Math.max(...vs);
+        g += ln(x(mn), yc, x(mx), yc, c, 'stroke-width="1.4"') + caps.map(cp => dot(x(R[cp][0]), yc, c, `${esc(lab)} (${cp.slice(4)}): ${pct(R[cp][0])}`, 'circle', true)).join('');
+        g += tx(xr, yc + 4, `${Math.round(mn * 100)}–${pct(mx)}`, 'num', 'end');
+        const ds = caps.map(cp => S.damage[cp]).filter(v => v != null);
+        g += cost(yc + 4, `≤ ${dmg(Math.max(...ds))}`);
+      } else {
+        const [m, l, h] = R[k];
+        g += ln(x(l), yc, x(h), yc, c, 'stroke-width="1.4" stroke-opacity="0.55"') + dot(x(m), yc, c, `${esc(lab)}: ${pct(m)} [${pct(l)}, ${pct(h)}]`);
+        g += tx(xr, yc + 4, pct(m), 'num', 'end');
+        const dk = k === 'clean' ? null : k === 'cap_axis' ? S.damage.cap_axis : S.damage[`${k}|${b}`];
+        g += cost(yc + 4, dmg(dk));
+      }
+      y += rh;
+    }
+    g = ln(x(R.clean[0]), y0 + 2, x(R.clean[0]), y - 2, '--faint', 'stroke-dasharray="3 3"') + g;
+    y += 12;
+  }
+  let grid = '';
+  for (const t of [0, 0.2, 0.4, 0.6]) grid += ln(x(t), gridTop + 4, x(t), y - 8, '--rule', t ? 'stroke-dasharray="2 4"' : '') + tx(x(t), y + 6, `${t * 100}%`, '', 'middle');
+  const H = y + 30;
+  setSVG(id, W, H, grid + g + tx((x0 + x1) / 2, H - 6, 'Share of replies showing the behavior', 'axt', 'middle'));
+}
+
 // ------------------------------------------------------------------ boot
 function openHash() {
   if (location.hash === '#methods') { showMethods(); return; }
@@ -636,7 +772,7 @@ async function init() {
   };
   $('source-line').textContent = `Data: ${state.index.source}. Built ${state.index.built}. Per-token neuron data from our own forward passes on an A100; O-lens readouts (agu18dec/olens_and_ar, s3d_rl600) and Assistant Axis projections from our own runs.`;
   let t;
-  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => state.rep && renderChart(), 120); });
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { if (state.b === METHODS) renderCompare(); else if (state.rep) renderChart(); }, 120); });
   await openHash();
 }
 init().catch(showError);
