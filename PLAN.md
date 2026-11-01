@@ -57,6 +57,12 @@ Also:
   its patterns are in our 403 prompts, two of them contain one of our 46 sharp forks.
 - Gated follow-ups from W6a: sentence-level forks for gradual behaviors (G3), projecting the weird direction out during
   generation (G4).
+- Persona follow-ups (approved 2026-11-01), same P3 prompts, seeds and Gemma judge:
+  X1 do the top-100 sets cancel the weirdness added by steering away from the Assistant end (fork value, no judge);
+  X2 search the 265 role vectors for the direction that matches weird-vs-normal, then cap it vs other roles;
+  X3 is each behavior just sycophancy (sycophantic trait vector vs other traits, drunk driving first);
+  X4 multi-turn drift prefixes (emotional / meta-reflection vs neutral) with and without capping;
+  X6 cap dose sweep (tau percentile x layer range) with matched role-pair controls. Not doing X5 (own axis) for now.
 - Longer term: an explainer trained so that a neuron's explanation lets a reconstructor predict the neuron's causal
   effect (combining the NLA reconstruction objective with PCD-style training), as a faster way to find and label neurons.
 
