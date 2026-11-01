@@ -487,8 +487,9 @@ function renderInspector() {
   const F = rep.fork;
   document.querySelectorAll('#inspector .ptabs button').forEach(b => b.onclick = () => setPanel(b.dataset.p));
   $('copy-link').onclick = async () => {
-    try { await navigator.clipboard.writeText(location.href); $('copy-status').textContent = 'Copied'; }
-    catch { $('copy-status').textContent = location.href; }
+    const lab = $('copy-link').lastChild;
+    try { await navigator.clipboard.writeText(location.href); lab.textContent = 'Copied'; setTimeout(() => { lab.textContent = 'Copy link'; }, 1500); }
+    catch { $('copy-status').textContent = location.href; $('copy-status').hidden = false; }
   };
   if ($('go-fork')) $('go-fork').onclick = () => selectToken(F.c0, true);
   document.querySelectorAll('#inspector [data-go]').forEach(b => b.onclick = () => selectToken(Number(b.dataset.go), true));
@@ -496,13 +497,15 @@ function renderInspector() {
   document.querySelectorAll('#inspector .cond').forEach(b => b.onclick = () => { state.lensKind = b.dataset.k; renderInspector(); });
   if ($('plens')) $('plens').ontoggle = e => { state.plensOpen = e.target.open; };
 }
+const LINK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 function tokHead(rep, j) {
   const atFork = rep.fork?.c0 === j;
-  return `<div class="tokhead"><code>${esc(vis(rep.t[j]))}</code><span class="meta">Token ${j + 1} of ${rep.t.length}${atFork ? ' · <span class="forktag">fork token</span>' : ''}</span></div>`;
+  return `<div class="tokhead"><code>${esc(vis(rep.t[j]))}</code><span class="meta">Token ${j + 1} of ${rep.t.length}${atFork ? ' · <span class="forktag">fork token</span>' : ''}</span>
+    <button type="button" class="copylink" id="copy-link" title="Copy link to this token">${LINK_ICON}<span>Copy link</span></button><span class="copy-fallback" id="copy-status" hidden></span></div>`;
 }
 function actions(rep, j) {
   const F = rep.fork;
-  return `<div class="actions">${F && F.c0 !== j ? `<button type="button" class="linkbtn" id="go-fork">Go to the fork, token ${F.c0 + 1}</button>` : ''}<button type="button" class="linkbtn" id="copy-link">Copy link to this token</button><span class="foot" id="copy-status"></span></div>`;
+  return F && F.c0 !== j ? `<div class="actions"><button type="button" class="linkbtn" id="go-fork">Go to the fork, token ${F.c0 + 1}</button></div>` : '';
 }
 function neuronPanel(rep, j) {
   const F = rep.fork, atFork = F && F.c0 === j, p = pwAt(rep, j), ms = mainSet(rep);

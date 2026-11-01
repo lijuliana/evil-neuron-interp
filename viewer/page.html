@@ -162,6 +162,10 @@ select:hover { border-color: var(--faint) }
 .tokhead code { font: 500 22px var(--mono); background: var(--accent-soft); padding: 2px 10px; border-radius: 6px; white-space: pre;
   max-width: 100%; overflow-x: auto }
 .tokhead .meta { font-size: 12.5px; color: var(--muted) }
+.copylink { margin-left: auto; appearance: none; border: 0; background: none; padding: 4px 0; display: inline-flex; align-items: center; gap: 5px;
+  font: 500 12px var(--sans); color: var(--faint); cursor: pointer; white-space: nowrap }
+.copylink:hover { color: var(--muted) }
+.copy-fallback { flex-basis: 100%; font: 11.5px var(--mono); color: var(--muted); user-select: all; overflow-wrap: anywhere }
 .forktag { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--hot) }
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }
 .kv label { display: block; font: 500 11.5px var(--sans); color: var(--muted); margin-bottom: 3px }
