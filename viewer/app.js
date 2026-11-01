@@ -619,7 +619,7 @@ function lensPanel(rep, j) {
 let CMP = null;
 async function renderCompare() {
   if (!CMP) CMP = await getJSON('compare.json');
-  figWithin(); figFork(); figPrompt(); figDirs(); figStop(); figShared(); figAbl(); figNlab();
+  figWithin(); figFork(); figDirs(); figStop(); figAbl(); figNlab(); figShared();
 }
 const figW = id => Math.max(320, Math.round($(id).clientWidth || $(id).parentNode.clientWidth || 640));
 const tx = (x, y, t, cls = '', anchor = 'start') => `<text x="${x}" y="${y}"${cls ? ` class="${cls}"` : ''} text-anchor="${anchor}">${t}</text>`;
@@ -702,53 +702,6 @@ function figFork() {
   setSVG(id, W, H, fl + g);
 }
 
-function figStop() {
-  const id = 'fig-stop', W = figW(id), S = CMP.stop, T = CMP.titles;
-  const bs = ['denying-ai-identity', 'false-physical-embodiment', 'laser-at-aircraft'].filter(b => S.behaviors[b]);
-  // narrow screens drop the cost column and shorten the labels
-  const narrow = W < 560;
-  const C = [['clean', 'No intervention', '--ink'], ['cap_axis', narrow ? 'Axis cap' : 'Assistant Axis cap', '--accent'], ['caps', narrow ? 'Other caps' : '5 other persona caps', '--ctrl'],
-    ['top100', narrow ? 'Top-100 zeroed' : 'Top-100 neurons zeroed', '--hot'], ['rand100', 'Random-100 zeroed', '--muted']];
-  const labW = narrow ? 112 : Math.min(185, Math.max(140, Math.round(W * 0.26))), costW = narrow ? 0 : 64, rateW = narrow ? 50 : 58;
-  const x0 = labW + 10, x1 = W - costW - rateW - 12, hi = 0.7, x = v => x0 + (x1 - x0) * Math.min(v, hi) / hi;
-  const xr = x1 + rateW, xc = W - 2, rh = 22, head = 26;
-  const dmg = v => v == null ? '–' : v < 0.001 ? v.toFixed(4) : v.toFixed(3);
-  const cost = (yy, t) => narrow ? '' : tx(xc, yy, t, 'num', 'end');
-  let y = 22, g = tx(xr, 12, 'Rate', 'colh', 'end') + (narrow ? '' : tx(xc, 12, 'Cost', 'colh', 'end'));
-  const gridTop = y;
-  for (const b of bs) {
-    const B = S.behaviors[b], R = B.rates, n = R.clean[3];
-    const caps = Object.keys(R).filter(k => k.startsWith('cap_rp'));
-    g += tx(0, y + 16, `${esc(T[b] || b)}${b === 'laser-at-aircraft' ? ', control' : ''}`, 'grp') + tx(xc, y + 16, narrow ? `${B.prompts} prompts` : `${B.prompts} prompts, ${n} replies each`, 'n', 'end');
-    y += head;
-    const y0 = y;
-    for (const [k, lab, c] of C) {
-      const yc = y + rh / 2;
-      g += tx(0, yc + 4, lab, 'lab');
-      if (k === 'caps') {
-        const vs = caps.map(cp => R[cp][0]), mn = Math.min(...vs), mx = Math.max(...vs);
-        g += ln(x(mn), yc, x(mx), yc, c, 'stroke-width="1.4"') + caps.map(cp => dot(x(R[cp][0]), yc, c, `${esc(lab)} (${cp.slice(4)}): ${pct(R[cp][0])}`, 'circle', true)).join('');
-        g += tx(xr, yc + 4, `${Math.round(mn * 100)}–${pct(mx)}`, 'num', 'end');
-        const ds = caps.map(cp => S.damage[cp]).filter(v => v != null);
-        g += cost(yc + 4, `≤ ${dmg(Math.max(...ds))}`);
-      } else {
-        const [m, l, h] = R[k];
-        g += ln(x(l), yc, x(h), yc, c, 'stroke-width="1.4" stroke-opacity="0.55"') + dot(x(m), yc, c, `${esc(lab)}: ${pct(m)} [${pct(l)}, ${pct(h)}]`);
-        g += tx(xr, yc + 4, pct(m), 'num', 'end');
-        const dk = k === 'clean' ? null : k === 'cap_axis' ? S.damage.cap_axis : S.damage[`${k}|${b}`];
-        g += cost(yc + 4, dmg(dk));
-      }
-      y += rh;
-    }
-    g = ln(x(R.clean[0]), y0 + 2, x(R.clean[0]), y - 2, '--faint', 'stroke-dasharray="3 3"') + g;
-    y += 12;
-  }
-  let grid = '';
-  for (const t of [0, 0.2, 0.4, 0.6]) grid += ln(x(t), gridTop + 4, x(t), y - 8, '--rule', t ? 'stroke-dasharray="2 4"' : '') + tx(x(t), y + 6, `${t * 100}%`, '', 'middle');
-  const H = y + 30;
-  setSVG(id, W, H, grid + g + tx((x0 + x1) / 2, H - 6, 'Share of replies showing the behavior', 'axt', 'middle'));
-}
-
 // rows of dot-and-interval marks on one x scale; each row: {lab, marks: [{v: [m, lo, hi], c, shape, hollow, title}], num}
 function dotRows(rows, o) {
   const { x, x0, top, rh, xr } = o;
@@ -768,23 +721,6 @@ function dotRows(rows, o) {
 }
 const xTicks = (x, ts, y0, y1, fmt) => ts.map(t => ln(x(t), y0, x(t), y1 + 4, t === 0 ? '--faint' : '--rule', t === 0 ? '' : 'stroke-dasharray="2 4"') + tx(x(t), y1 + 18, fmt(t), '', 'middle')).join('');
 const s1 = v => v === 0 ? '0' : sgn(v).replace(/0$/, '');
-
-function figPrompt() {
-  const id = 'fig-prompt', W = figW(id), d = CMP.prompt, narrow = W < 560;
-  const S = [['text', 'Text judge', '--muted', 'circle'], ['lens32', 'O-lens, layer 32', '--accent', 'circle'], ['lens44', 'O-lens, layer 44', '--accent', 'circle'],
-    ['lens56', 'O-lens, layer 56', '--accent', 'circle'], ['axis', narrow ? 'Assistant Axis' : 'Assistant Axis, sign flipped', '--cool', 'square'],
-    ['evil', narrow ? 'Evil vector' : 'Evil trait vector', '--ctrl', 'square'], ['halluc', narrow ? 'Hallucinating vector' : 'Hallucinating trait vector', '--ctrl', 'square']];
-  const labW = narrow ? 128 : 190, numW = narrow ? 0 : 96, x0 = labW + 10, x1 = W - numW - 14, lo = -0.2, hi = 0.5;
-  const x = v => x0 + (x1 - x0) * (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
-  const rh = 30, top = 20, bot = top + S.length * rh, H = bot + 44;
-  const rows = S.map(([k, lab, c, shape]) => ({ lab: esc(lab), num: narrow ? null : `${sgn(d[k].on[0])} / ${sgn(d[k].off[0])}`, marks: [
-    { v: d[k].on, c, shape, title: `${lab}, thinking-on rates: ${sgn(d[k].on[0])} [${sgn(d[k].on[1])}, ${sgn(d[k].on[2])}]` },
-    { v: d[k].off, c, shape, hollow: true, title: `${lab}, thinking-off rates: ${sgn(d[k].off[0])} [${sgn(d[k].off[1])}, ${sgn(d[k].off[2])}]` }] }));
-  const g = xTicks(x, [-0.2, 0, 0.2, 0.4], top, bot, s1) + (narrow ? '' : tx(W - 2, 12, 'On / off', 'colh', 'end')) +
-    dotRows(rows, { x, x0, top, rh, xr: W - 2 }) +
-    tx((x0 + x1) / 2, H - 6, narrow ? 'Rank correlation with the rate' : "Rank correlation with the prompt's weird rate, within behavior", 'axt', 'middle');
-  setSVG(id, W, H, g);
-}
 
 function figDirs() {
   const id = 'fig-dirs', W = figW(id), D = CMP.dirs, T = CMP.titles, ids = CMP.shared.ids;
@@ -806,46 +742,6 @@ function figDirs() {
   const H = top + Math.ceil(order.length / cols) * (ph + gapY) - gapY + 50;
   g += tx(W / 2, H - 6, 'Reply tokens read (log scale); y: AUROC, 0.5 = chance', 'axt', 'middle');
   setSVG(id, W, H, g);
-}
-
-// grouped rate rows (figure 6): each group has a header line, then one row per condition
-function figShared() {
-  const id = 'fig-shared', W = figW(id), S = CMP.shared, T = CMP.titles, narrow = W < 560;
-  const groups = [['pooled', 'All three behaviors'], ...['drunk', 'chemtrails', 'cutting'].map(b => [b, T[S.ids[b]] || b])].filter(([b]) => S.behaviors[b]);
-  const C = [['clean', null, 'No intervention'], ['sharedmid100', 'rand_sharedmid100', narrow ? 'Shared mid-layer' : 'Shared mid-layer 100 zeroed'],
-    ['shared100', 'rand_shared100', narrow ? 'Shared, all layers' : 'Shared 100 zeroed (all layers)'], ['loo100', 'rand_loo100', narrow ? 'Leave-one-out' : 'Leave-one-out shared 100 zeroed']];
-  const labW = narrow ? 112 : Math.min(205, Math.max(160, Math.round(W * 0.27))), costW = narrow ? 0 : 74, rateW = narrow ? 62 : 82;
-  const x0 = labW + 10, x1 = W - costW - rateW - 12, hi = 0.45, x = v => x0 + (x1 - x0) * Math.min(v, hi) / hi;
-  const xr = x1 + rateW, xc = W - 2, rh = 24, head = 26;
-  const dmg = v => v == null ? '–' : v < 0.001 ? v.toFixed(4) : v.toFixed(3);
-  let y = 22, g = tx(xr, 12, narrow ? 'Set / rand.' : 'Set / random', 'colh', 'end') + (narrow ? '' : tx(xc, 12, 'Cost', 'colh', 'end'));
-  const gridTop = y;
-  for (const [b, name] of groups) {
-    const B = S.behaviors[b], idb = S.ids[b];
-    g += tx(0, y + 16, esc(name), 'grp') + tx(xc, y + 16, `${B.prompts} prompts, ${B.clean[3]} replies`, 'n', 'end');
-    y += head;
-    const y0 = y;
-    const rows = C.map(([k, rk, lab]) => {
-      const marks = [{ v: B[k], c: k === 'clean' ? '--ink' : '--hot', title: `${lab}: ${pct(B[k][0])} [${pct(B[k][1])}, ${pct(B[k][2])}]` }];
-      if (rk) marks.push({ v: B[rk], c: '--muted', hollow: true, title: `matched random set: ${pct(B[rk][0])} [${pct(B[rk][1])}, ${pct(B[rk][2])}]` });
-      return { lab, marks, num: rk ? `${pct(B[k][0])} / ${pct(B[rk][0])}` : pct(B[k][0]), k };
-    });
-    g += dotRows(rows, { x, x0, top: y, rh, xr });
-    if (!narrow) rows.forEach((r, i) => {
-      if (r.k === 'clean') return;
-      let c;
-      if (r.k !== 'loo100') c = dmg(S.damage[r.k]);
-      else if (b !== 'pooled') c = dmg(S.damage[`loo100|${idb}`]);
-      else { const v = Object.keys(S.damage).filter(k => k.startsWith('loo100|')).map(k => S.damage[k]); c = `${dmg(Math.min(...v))}–${dmg(Math.max(...v)).replace(/^0/, '')}`; }
-      g += tx(xc, y + i * rh + rh / 2 + 4, c, 'num', 'end');
-    });
-    y += C.length * rh;
-    g = ln(x(B.clean[0]), y0 + 2, x(B.clean[0]), y - 2, '--faint', 'stroke-dasharray="3 3"') + g;
-    y += 12;
-  }
-  const grid = (narrow ? [0, 0.2, 0.4] : [0, 0.1, 0.2, 0.3, 0.4]).map(t => ln(x(t), gridTop + 4, x(t), y - 8, '--rule', t ? 'stroke-dasharray="2 4"' : '') + tx(x(t), y + 6, `${Math.round(t * 100)}%`, '', 'middle')).join('');
-  const H = y + 30;
-  setSVG(id, W, H, grid + g + tx((x0 + x1) / 2, H - 6, 'Share of replies showing the behavior', 'axt', 'middle'));
 }
 
 function figAbl() {
@@ -897,6 +793,73 @@ function figNlab() {
     return `<li><b>${esc(b.title)}</b> <span class="nid">L${n.L} N${n.n} ${n.olens.sign}</span> “${esc(n.olens.text)}” <span class="sc">${+n.olens.w.toFixed(1)}/10</span></li>`;
   });
   $('fig-nlab-ex').innerHTML = ex.length ? `<p>Highest-scoring readout in each behavior's top 10</p><ul>${ex.join('')}</ul>` : '';
+}
+
+// vertical grouped bars for rates. groups: [{lab, bars: [{v: [m, lo, hi] | [m], c, op, title, pts: [{v, dx, shape, title}]}]}]
+const shape = (x, y, kind, title) => {
+  const st = 'fill:var(--sheet);stroke:var(--ink);stroke-width:1.3', t = `<title>${esc(title)}</title>`;
+  if (kind === 'square') return `<rect x="${x - 3}" y="${y - 3}" width="6" height="6" style="${st}">${t}</rect>`;
+  if (kind === 'tri') return `<path d="M${x},${y - 3.8}L${x + 3.6},${y + 2.6}L${x - 3.6},${y + 2.6}Z" style="${st}">${t}</path>`;
+  return `<circle cx="${x}" cy="${y}" r="3.1" style="${st}">${t}</circle>`;
+};
+function barFig(id, groups, o) {
+  const W = figW(id), narrow = W < 560, x0 = 38, x1 = W - 4, top = 16, ph = o.h || 210, ymax = o.ymax;
+  const ys = v => top + ph * (1 - Math.min(v, ymax) / ymax);
+  const nmax = Math.max(...groups.map(G => G.bars.length)), gw = (x1 - x0) / groups.length, bw = Math.min(56, gw * (narrow ? 0.86 : 0.74) / nmax);
+  const cw = narrow ? 5.8 : 6.6;  // rough character width of a group label
+  const lines = lab => {  // a group label on at most two lines that fit the group's width
+    if (lab.length * cw < gw - 6) return [lab];
+    const w = lab.split(' ');
+    let best = [lab], bd = 1e9;
+    for (let i = 1; i < w.length; i++) {
+      const a = w.slice(0, i).join(' '), b = w.slice(i).join(' '), d = Math.max(a.length, b.length);
+      if (d < bd) { bd = d; best = [a, b]; }
+    }
+    return best;
+  };
+  const whisk = 'stroke-width="1.2" stroke-opacity="0.6"';
+  let g = '', nl = 1;
+  for (const t of o.ticks) g += ln(x0, ys(t), x1, ys(t), t ? '--rule' : '--faint', t ? 'stroke-dasharray="2 4"' : '') + tx(x0 - 6, ys(t) + 4, `${Math.round(t * 100)}%`, '', 'end');
+  groups.forEach((G, gi) => {
+    const gx = x0 + gi * gw + (gw - G.bars.length * bw) / 2;
+    G.bars.forEach((b, bi) => {
+      const bx = gx + bi * bw, w = bw - Math.min(5, bw * 0.16), cx = bx + w / 2, [m, l, h] = b.v;
+      g += `<rect x="${bx}" y="${ys(m)}" width="${w}" height="${ys(0) - ys(m)}" rx="1.5" style="fill:var(${b.c})" fill-opacity="${b.op ?? 0.85}"><title>${esc(b.title)}</title></rect>`;
+      if (l != null) g += ln(cx, ys(l), cx, ys(h), '--ink', whisk) + ln(cx - 3, ys(h), cx + 3, ys(h), '--ink', whisk) + ln(cx - 3, ys(l), cx + 3, ys(l), '--ink', whisk);
+      for (const p of b.pts || []) g += shape(cx + (p.dx || 0) * Math.min(1, w / 40), ys(p.v), p.shape, p.title);  // dx is for a 40px bar
+      if (!narrow) g += tx(cx, Math.min(ys(h ?? m), ...(b.pts || []).map(p => ys(p.v) - 4)) - 6, pct(m), 'bv', 'middle');
+    });
+    const L = lines(narrow && G.short ? G.short : G.lab);
+    nl = Math.max(nl, L.length);
+    L.forEach((t, k) => { g += tx(x0 + gi * gw + gw / 2, ys(0) + 17 + k * 14, esc(t), narrow ? 'glab s' : 'glab', 'middle'); });
+  });
+  if (o.ref != null) g += ln(x0, ys(o.ref), x1, ys(o.ref), '--ink', 'stroke-dasharray="5 4" stroke-opacity="0.5"');
+  setSVG(id, W, ys(0) + 17 + (nl - 1) * 14 + 10, g);
+}
+
+function figStop() {
+  const S = CMP.stop, T = CMP.titles;
+  const bs = ['denying-ai-identity', 'false-physical-embodiment', 'laser-at-aircraft'].filter(b => S.behaviors[b]);
+  const groups = bs.map(b => {
+    const R = S.behaviors[b].rates, caps = Object.keys(R).filter(k => k.startsWith('cap_rp')), cm = caps.reduce((a, k) => a + R[k][0], 0) / caps.length;
+    const bar = (k, c, name) => ({ v: R[k], c, title: `${name}: ${pct(R[k][0])} [${pct(R[k][1])}, ${pct(R[k][2])}]` });
+    return { lab: `${T[b] || b}${b === 'laser-at-aircraft' ? ' (control)' : ''}`, bars: [
+      bar('clean', '--ink', 'No intervention'), bar('cap_axis', '--accent', 'Assistant Axis cap'),
+      { v: [cm], c: '--ctrl', op: 0.45, title: `5 other persona caps, mean: ${pct(cm)}`, pts: caps.map((k, i) => ({ v: R[k][0], dx: (i - 2) * 6.5, title: `other persona cap ${k.slice(4)}: ${pct(R[k][0])}` })) },
+      bar('top100', '--hot', 'Top-100 neurons zeroed'), { ...bar('rand100', '--muted', 'Random-100 zeroed'), op: 0.75 }] };
+  });
+  barFig('fig-stop', groups, { ymax: 0.7, ticks: [0, 0.2, 0.4, 0.6], h: 220 });
+}
+
+function figShared() {
+  const S = CMP.shared, B = S.behaviors, T = CMP.titles, bs = ['drunk', 'chemtrails', 'cutting'].filter(b => B[b]);
+  const SH = { drunk: 'circle', chemtrails: 'square', cutting: 'tri' };
+  const pts = k => bs.map((b, i) => ({ v: B[b][k][0], dx: (i - 1) * 9, shape: SH[b], title: `${T[S.ids[b]] || b}: ${pct(B[b][k][0])} (${B[b][k][3]} replies)` }));
+  const bar = (k, c, name) => ({ v: B.pooled[k], c, title: `${name}, all three behaviors: ${pct(B.pooled[k][0])} [${pct(B.pooled[k][1])}, ${pct(B.pooled[k][2])}]`, pts: pts(k) });
+  const groups = [{ lab: 'No intervention', short: 'None', bars: [bar('clean', '--ink', 'No intervention')] },
+    ...[['sharedmid100', 'Shared mid-layer 100', 'Mid-layer'], ['shared100', 'Shared 100, all layers', 'All layers'], ['loo100', 'Leave-one-out shared 100', 'Leave-one-out']].map(([k, lab, short]) =>
+      ({ lab, short, bars: [bar(k, '--hot', `${lab} zeroed`), { ...bar(`rand_${k}`, '--muted', 'Matched random set zeroed'), op: 0.75 }] }))];
+  barFig('fig-shared', groups, { ymax: 0.3, ticks: [0, 0.1, 0.2, 0.3], h: 200, ref: B.pooled.clean[0] });
 }
 
 // ------------------------------------------------------------------ boot
